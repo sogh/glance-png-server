@@ -383,22 +383,82 @@ gets a resolution failure and keeps showing its cached frame until it
 recovers. An `A` record on a domain you own, pointing at the LAN address, is
 the durable version of the same trick.
 
-**If verification really does fetch,** the URL has to be reachable from the
-internet at setup time and a tunnel is the answer:
+In practice this alias **does not work**, and the second error says why:
+
+```
+Image verification failed. host resolves to a private/reserved IP - refused
+```
+
+The verifier resolves the name and then inspects the resulting address,
+rejecting private and reserved ranges. That is ordinary SSRF protection and
+the right call on their side — a server that fetches user-supplied URLs can
+otherwise be pointed at cloud metadata endpoints or internal services and used
+as a proxy into its own network. It simply contradicts the documentation's
+claim that a Raspberry Pi on your own network works.
+
+Two ways forward.
+
+**Split-horizon DNS — keeps the image on your LAN.** Give a name you control
+two different answers depending on who asks:
+
+| Asker | Resolver | Answer |
+|---|---|---|
+| Glance's verifier | public DNS | a public address (passes the check) |
+| your Glance device | your router / Pi-hole / Unbound | `192.168.1.50` |
+
+The device uses your LAN's resolver, so it connects locally and the image
+never leaves your network. Whether this holds depends on whether verification
+stops at resolution or goes on to fetch — if it fetches, the public address
+has to actually serve a valid PNG at that moment. Needs a domain you control
+and a local resolver you can add overrides to.
+
+**A tunnel — guaranteed, with a privacy cost.**
 
 ```bash
 cloudflared tunnel --url http://192.168.1.50:8080
 ```
 
-Weigh that properly. A public URL means the panel's contents are genuinely
-public — fine for holiday artwork, a real consideration for calendar entries
-and todos. The Glance docs already tell you to treat anything on the display
-as readable by a stranger, but a LAN-only URL made that mostly theoretical,
-and a tunnel does not.
+Weigh this properly. A public URL means the panel's contents are genuinely
+public. Fine for holiday artwork; a real consideration for calendar entries
+and todos. The Glance docs already say to treat anything on the display as
+readable by a stranger, but a LAN-only URL made that mostly theoretical and a
+tunnel does not.
 
-You can also split the difference: point the Glance at a channel that only
-carries non-sensitive scenes, and keep the calendar and todo channels on
-LAN-only URLs used by something else.
+If you go this way, **set an access token** (see below), and consider pointing
+the Glance at a channel carrying only non-sensitive scenes while calendar and
+todo channels stay on LAN-only URLs.
+
+### Access token
+
+Optional, and pointless on a LAN-only deployment. Worth setting the moment the
+server is reachable from the internet.
+
+```bash
+openssl rand -hex 16          # put it in .env as GLANCE_TOKEN
+```
+
+`config/settings.yaml` already reads it:
+
+```yaml
+server:
+  access_token: "${GLANCE_TOKEN:-}"
+```
+
+Every image, preview and status route then requires `?k=<token>` (or an
+`X-Glance-Token` header). The device URL becomes:
+
+```
+http://your-tunnel-host/c/main.png?k=<token>
+```
+
+A wrong or missing token answers **404, not 403** — a stranger should not be
+able to enumerate your channels. `/healthz` stays open so uptime checks work,
+but stops listing channel names. The token is stripped before query parameters
+reach a scene, so it can never end up rendered onto the panel.
+
+This is a shared secret over plain HTTP, and the Glance speaks only HTTP — so
+treat it as *raising the bar against a stranger guessing your URL*, not as
+real transport security. Anyone who can watch the traffic sees the token.
 
 ### If the container will not start
 

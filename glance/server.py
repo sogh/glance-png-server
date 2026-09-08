@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 from typing import Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .runtime import GlanceApp
@@ -46,6 +47,9 @@ def _params(request: Request, drop: set[str]) -> dict[str, Any]:
     return {k: _coerce(v) for k, v in request.query_params.items() if k not in drop}
 
 
+RESERVED_QUERY = {"peek", "k", "_"}
+
+
 def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) -> Response:
     headers = {
         "Cache-Control": NO_CACHE,
@@ -61,6 +65,30 @@ def create_app(config_path: str | None = None) -> FastAPI:
     glance = GlanceApp.from_config(config_path or os.environ.get("GLANCE_CONFIG"))
     api = FastAPI(title="Glance PNG Server", version="1.0", docs_url="/api/docs")
     api.state.glance = glance
+    token = glance.settings.access_token
+
+    def require_token(request: Request) -> None:
+        """Gate a route behind the shared secret, if one is configured.
+
+        Only matters when the server is exposed beyond the LAN -- the Glance
+        setup app refuses private addresses, so reaching it may mean putting
+        it on the public internet, and the panel can carry calendar entries
+        and todos.
+
+        Answers 404 rather than 403 on a bad token: an unauthenticated caller
+        should not be able to learn which channels exist.
+        """
+        if not token:
+            return
+        supplied = request.query_params.get("k") or request.headers.get("x-glance-token", "")
+        if not secrets.compare_digest(supplied, token):
+            raise HTTPException(status_code=404, detail="not found")
+
+    def tokened(url: str) -> str:
+        """Append the token to a URL the preview page will request."""
+        if not token:
+            return url
+        return f"{url}{'&' if '?' in url else '?'}k={token}"
 
     @api.get("/", include_in_schema=False)
     def index() -> RedirectResponse:
@@ -68,16 +96,22 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @api.get("/healthz")
     def healthz() -> dict[str, Any]:
+        # Stays open so uptime checks work, but says nothing about the
+        # configuration when a token is in force.
+        if token:
+            return {"ok": True}
         return {"ok": True, "channels": sorted(glance.settings.channels)}
 
     @api.get("/api/status")
-    def status() -> JSONResponse:
+    def status(request: Request) -> JSONResponse:
+        require_token(request)
         return JSONResponse(glance.status(), headers={"Cache-Control": NO_CACHE})
 
     @api.post("/api/reset")
     @api.post("/api/reset/{channel}")
-    def reset(channel: str | None = None) -> dict[str, Any]:
+    def reset(request: Request, channel: str | None = None) -> dict[str, Any]:
         """Put a channel's rotation back to its first available scene."""
+        require_token(request)
         glance.carousel.reset(channel)
         return {"reset": channel or "all"}
 
@@ -85,6 +119,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @api.get("/c/{channel}")
     def channel_png(channel: str, request: Request) -> Response:
+        require_token(request)
         name = channel[:-4] if channel.endswith(".png") else channel
         # ?peek=1 renders without consuming a rotation slot -- used by the
         # preview page so opening it in a browser does not skip scenes.
@@ -99,19 +134,22 @@ def create_app(config_path: str | None = None) -> FastAPI:
 
     @api.get("/s/{ref}")
     def scene_png(ref: str, request: Request) -> Response:
+        require_token(request)
         name = ref[:-4] if ref.endswith(".png") else ref
-        canvas, label = glance.render_scene(name, _params(request, {"peek"}))
+        canvas, label = glance.render_scene(name, _params(request, RESERVED_QUERY))
         return _png_response(glance.png(canvas), label)
 
     # --- preview ------------------------------------------------------------
 
     @api.get("/preview", response_class=HTMLResponse)
     def preview(request: Request) -> HTMLResponse:
+        require_token(request)
         ctx = glance.context()
         zoom = int(request.query_params.get("zoom", 4))
         info = glance.status()
 
         def frame(src: str, title: str, note: str = "") -> str:
+            src = tokened(src)
             return (
                 f'<figure><img src="{src}" alt="{title}" '
                 f'style="width:{glance.settings.width * zoom}px">'
@@ -161,8 +199,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
 </style>
 <h1>Glance preview &mdash; {glance.settings.width}&times;32 at {zoom}&times;</h1>
 <p class="meta">{info['now']} &middot; carousel <code>{info['carousel']['mode']}</code>
- &middot; <a href="/api/status">status json</a>
- &middot; <a href="?zoom={3 if zoom != 3 else 5}">toggle zoom</a></p>
+ &middot; <a href="{tokened('/api/status')}">status json</a>
+ &middot; <a href="{tokened(f'/preview?zoom={3 if zoom != 3 else 5}')}">toggle zoom</a></p>
 {"".join(parts) or "<p class='meta'>No channels configured.</p>"}
 <h3>All scenes</h3><div class="grid">{scene_frames}</div>
 <h3>Static artwork ({len(list_static(ctx))})</h3><div class="grid">{static_frames

@@ -17,6 +17,19 @@ server:
   host: 0.0.0.0
   port: 8080
 
+  # Optional shared secret. Leave empty on a LAN-only deployment.
+  #
+  # Set it if you have to expose this server to the internet -- which the
+  # Glance setup app may force, since it refuses to verify a URL that resolves
+  # to a private address. With a token set, every image, preview and status
+  # route needs ?k=<token>, and a wrong one answers 404 rather than 403 so a
+  # stranger cannot even enumerate your channels.
+  #
+  #   openssl rand -hex 16      then put it in .env as GLANCE_TOKEN
+  #
+  # The device url then becomes .../c/main.png?k=<token>
+  access_token: "${GLANCE_TOKEN:-}"
+
 carousel:
   # advance = step to the next scene on every real fetch from the device.
   # clock   = pick purely from wall-clock time (stateless, but can skip scenes
