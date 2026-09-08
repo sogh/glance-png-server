@@ -336,6 +336,7 @@ carousel and could serve yesterday's calendar.
 | `--timezone TZ` | from `settings.yaml` | container clock |
 | `--with-data` | off | also push `data/todos.json` |
 | `--privileged` | off | privileged container — fallback, see below |
+| `--features LIST` | `nesting=1` | `pct` features |
 | `--dry-run` | off | package and list, send nothing |
 
 To drop the `:8080` from the URL, deploy with `--port 80`. The systemd unit
@@ -344,39 +345,37 @@ service user can bind a privileged port without running as root.
 
 ### If the container will not start
 
-`pct create` can succeed and `pct start` still fail, typically like this:
+`pct create` can succeed and `pct start` still fail. The deploy script stops
+there and prints `pct config`, the tail of `pct start --debug`, and
+`/var/log/lxc/<ctid>.log` — the real cause is almost always named in one of
+those three. Read to the bottom of the debug output; the interesting line sits
+just above the generic `sync_wait` / `Failed to spawn` pair.
 
-```
-sync_wait: 34 An error occurred in another process (expected sequence number 7)
-__lxc_start: 2126 Failed to spawn container "101"
-```
-
-The deploy script stops at that point and prints `pct config`, the tail of
-`pct start --debug`, and `/var/log/lxc/<ctid>.log` — the failure is almost
-always named in one of those three.
-
-The usual cause is the **unprivileged** container: LXC maps the container's
-users into a host uid range, and if AppArmor or `/etc/subuid` and
-`/etc/subgid` are not cooperating, it dies during spawn. This is a known rough
-edge on the **ARM builds of Proxmox** in particular.
-
-To find out whether that is it, destroy the failed container and retry
-privileged:
+**`Exec format error - Failed to exec "/sbin/init"`** means the template's
+architecture does not match the host — an arm64 rootfs on an x86_64 kernel, or
+the reverse. The container can never start. Destroy and redeploy:
 
 ```bash
 ssh root@proxmox 'pct destroy 101'
-deploy/pve-deploy.sh --pve root@proxmox --ip 192.168.1.50/24 --gw 192.168.1.1 --privileged
+deploy/pve-deploy.sh --pve root@proxmox --ip 192.168.1.50/24 --gw 192.168.1.1
 ```
 
-If it starts that way, the problem was the uid mapping. A privileged container
-is a weaker boundary — root inside is closer to root outside — so it is worth
-fixing the mapping and going back to unprivileged if you can. For a service on
-your own LAN that renders PNGs, it is a defensible place to land in the
-meantime.
+The script selects the template matching `dpkg --print-architecture` on the
+host, and refuses to reuse an existing container whose `arch:` disagrees.
 
-Note the container is created with **no `nesting` feature**. It runs a plain
-Python service, never containers inside containers, and nesting only loosens
-the AppArmor profile.
+**AppArmor or uid-mapping errors** point at the unprivileged container: LXC
+maps container users into a host uid range, and if AppArmor or `/etc/subuid`
+and `/etc/subgid` are not cooperating it dies during spawn. To test that
+theory, retry with `--privileged`. If it starts that way, the uid mapping was
+the problem. A privileged container is a weaker boundary — root inside is
+closer to root outside — so prefer fixing the mapping and going back.
+
+**On `nesting`:** the container is created with `features=nesting=1`, and it
+matters more than the name suggests. Debian 13 ships systemd 257, which
+Proxmox warns needs nesting in an unprivileged container, and this project's
+own service unit uses `PrivateTmp`, `ProtectSystem=strict`, `ProtectHome` and
+`PrivateDevices` — all mount-namespace operations that fail to set up without
+it. Override with `--features` only if you know you want to.
 
 ### Operating it
 

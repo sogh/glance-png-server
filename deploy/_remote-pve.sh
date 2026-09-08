@@ -62,6 +62,16 @@ wait_for() {
 
 if pct status "$GL_CTID" >/dev/null 2>&1; then
   echo "==> container $GL_CTID exists, reusing it"
+  # A container built from a mismatched template can never start. Say so
+  # plainly instead of letting it fail again with "Exec format error".
+  CT_ARCH="$(pct config "$GL_CTID" 2>/dev/null | awk '/^arch:/ {print $2}')"
+  HOST_ARCH="$(dpkg --print-architecture)"
+  if [[ -n "$CT_ARCH" && "$CT_ARCH" != "$HOST_ARCH" ]]; then
+    echo "error: container $GL_CTID is arch '$CT_ARCH' but this host is '$HOST_ARCH'." >&2
+    echo "       It cannot start. Destroy it and redeploy:" >&2
+    echo "           pct destroy $GL_CTID" >&2
+    exit 1
+  fi
   if ! is_running; then
     echo "==> starting $GL_CTID"
     if ! pct start "$GL_CTID"; then dump_start_failure; exit 1; fi
@@ -69,11 +79,24 @@ if pct status "$GL_CTID" >/dev/null 2>&1; then
 else
   [[ -n "$GL_IP" ]] || { echo "error: container missing and no ip given" >&2; exit 1; }
 
-  echo "==> finding a Debian template"
+  # `pveam available` lists every architecture. Filtering only by name and
+  # taking the last after a version sort silently prefers arm64 over amd64 --
+  # "arm64" sorts after "amd64" because r > m -- which produces a container
+  # whose /sbin/init the host kernel cannot exec ("Exec format error").
+  # Match the host's own architecture explicitly.
+  HOST_ARCH="$(dpkg --print-architecture)"
+  echo "==> finding a Debian template for $HOST_ARCH"
   pveam update >/dev/null 2>&1 || true
   TEMPLATE="$(pveam available --section system 2>/dev/null | awk '{print $2}' \
-              | grep -E '^debian-1[0-9]-standard' | sort -V | tail -1)"
-  [[ -n "$TEMPLATE" ]] || { echo "error: no debian template in 'pveam available'" >&2; exit 1; }
+              | grep -E "^debian-1[0-9]-standard.*_${HOST_ARCH}\." | sort -V | tail -1)"
+  if [[ -z "$TEMPLATE" ]]; then
+    echo "error: no debian template for architecture '$HOST_ARCH' in 'pveam available'" >&2
+    echo "       templates on offer:" >&2
+    pveam available --section system 2>/dev/null | awk '{print $2}' \
+      | grep -E '^debian-' | sed 's/^/         /' >&2
+    exit 1
+  fi
+  echo "    $TEMPLATE"
 
   if ! pveam list "$GL_TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE"; then
     echo "==> downloading $TEMPLATE"
@@ -86,19 +109,23 @@ else
     NET="name=eth0,bridge=$GL_BRIDGE,ip=$GL_IP,gw=$GL_GW"
   fi
 
-  # Deliberately no --features nesting=1: this runs a plain Python service,
-  # never containers inside containers. Nesting only loosens the AppArmor
-  # profile, which is surface we have no use for.
+  # nesting=1 is not about running containers inside containers here. Debian 13
+  # ships systemd 257, and Proxmox warns that it needs nesting in an
+  # unprivileged container. Our own service unit leans on PrivateTmp,
+  # ProtectSystem=strict, ProtectHome and PrivateDevices, all of which set up
+  # mount namespaces that fail without it.
+  FEATURES="${GL_FEATURES:-nesting=1}"
   # Created stopped, then started as a separate step so a spawn failure is
   # caught here with its log rather than surfacing later as a confusing
   # "container not running" from some unrelated command.
-  echo "==> creating container $GL_CTID ($GL_NAME), unprivileged=$GL_UNPRIVILEGED"
+  echo "==> creating container $GL_CTID ($GL_NAME), unprivileged=$GL_UNPRIVILEGED, features=$FEATURES"
   pct create "$GL_CTID" "$GL_TEMPLATE_STORAGE:vztmpl/$TEMPLATE" \
     --hostname "$GL_NAME" \
     --cores "$GL_CORES" --memory "$GL_MEMORY" --swap 512 \
     --rootfs "$GL_STORAGE:$GL_DISK" \
     --net0 "$NET" \
     --unprivileged "$GL_UNPRIVILEGED" \
+    --features "$FEATURES" \
     --onboot 1
 
   echo "==> starting container $GL_CTID"

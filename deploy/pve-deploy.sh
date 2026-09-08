@@ -26,6 +26,8 @@
 #   --timezone TZ     container timezone       (default: from settings.yaml)
 #   --with-data       also push data/todos.json
 #   --privileged      create a privileged container         (see note below)
+#   --features LIST   pct features            (default: nesting=1, needed by
+#                     systemd 257 in Debian 13 and by our unit's sandboxing)
 #   --dry-run         build the tarball, show contents, change nothing
 #
 # --privileged is a fallback, not a default. Unprivileged containers are the
@@ -43,6 +45,7 @@ DISK="${DISK:-4}"; CORES="${CORES:-1}"; MEMORY="${MEMORY:-512}"
 PORT="${PORT:-8080}"; TIMEZONE="${TIMEZONE:-}"
 REMOTE_ROOT="${REMOTE_ROOT:-/opt/glance-png-server}"
 UNPRIVILEGED="${UNPRIVILEGED:-1}"
+FEATURES="${FEATURES:-nesting=1}"
 WITH_DATA=0; DRY=0
 
 while [[ $# -gt 0 ]]; do
@@ -61,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     --timezone)  TIMEZONE="$2"; shift 2 ;;
     --with-data) WITH_DATA=1; shift ;;
     --privileged) UNPRIVILEGED=0; shift ;;
+    --features)  FEATURES="$2"; shift 2 ;;
     --dry-run)   DRY=1; shift ;;
     -h|--help)   sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)           echo "unknown option: $1" >&2; exit 1 ;;
@@ -153,6 +157,7 @@ REMOTE_ENV=(
   "GL_DISK='$DISK'" "GL_CORES='$CORES'" "GL_MEMORY='$MEMORY'"
   "GL_TARBALL='/tmp/glance-deploy.$$.tar.gz'" "GL_ROOT='$REMOTE_ROOT'"
   "GL_PORT='$PORT'" "GL_TIMEZONE='$TIMEZONE'" "GL_UNPRIVILEGED='$UNPRIVILEGED'"
+  "GL_FEATURES='$FEATURES'"
 )
 
 set +e
