@@ -412,21 +412,78 @@ stops at resolution or goes on to fetch — if it fetches, the public address
 has to actually serve a valid PNG at that moment. Needs a domain you control
 and a local resolver you can add overrides to.
 
-**A tunnel — guaranteed, with a privacy cost.**
+**A plain-HTTP public URL — guaranteed, with a privacy cost.**
 
-```bash
-cloudflared tunnel --url http://192.168.1.50:8080
+Mind the protocol here. The docs are explicit:
+
+> "Your Glance fetches its images over plain `http` rather than `https`. This
+> is a deliberate design choice."
+
+So `cloudflared tunnel --url ...` is a poor fit despite being the obvious
+reflex: it hands you an `https://` hostname and redirects HTTP to HTTPS, which
+an HTTP-only client cannot follow. A quick tunnel may satisfy the *verifier*
+and then fail at the *device*. If you want a tunnel, it has to be a named one
+on a domain you control with "Always Use HTTPS" turned off — at which point a
+port forward is simpler.
+
+A port forward on the gateway is plain HTTP end to end and just works:
+
+```
+WAN :8080  ->  192.168.1.50:8080
 ```
 
-Weigh this properly. A public URL means the panel's contents are genuinely
+Weigh it properly. A public URL means the panel's contents are genuinely
 public. Fine for holiday artwork; a real consideration for calendar entries
 and todos. The Glance docs already say to treat anything on the display as
 readable by a stranger, but a LAN-only URL made that mostly theoretical and a
-tunnel does not.
+port forward does not.
 
-If you go this way, **set an access token** (see below), and consider pointing
-the Glance at a channel carrying only non-sensitive scenes while calendar and
-todo channels stay on LAN-only URLs.
+If you go this way, **set an access token** (below), and consider pointing the
+Glance at a channel carrying only non-sensitive scenes while calendar and todo
+channels stay on LAN-only URLs.
+
+### Split-horizon on a UniFi gateway
+
+UniFi gateways can answer a hostname with a LAN address while public DNS
+answers the same name with your WAN address. That gets the URL past
+verification while the device still fetches locally.
+
+**1 — a hostname.** Any domain you control works. Without one, a free dynamic
+DNS name (DuckDNS and similar) does the job, since all the public record needs
+to be is *not private*.
+
+```
+glance.example.com   A   <your WAN address>      (public DNS)
+```
+
+**2 — the local override.** In UniFi Network, add a local DNS A record
+pointing the same name at the container:
+
+```
+glance.example.com   A   192.168.1.50           (UniFi local DNS)
+```
+
+Ubiquiti moves this between releases — recent versions have it under
+*Settings → Routing → DNS*, and per-client under *Client Devices → the device
+→ Settings → Local DNS Record*. See
+[UniFi DNS Records and Local Hostnames](https://help.ui.com/hc/en-us/articles/15179064940439-UniFi-DNS-Records-and-Local-Hostnames).
+
+**3 — make sure the Glance actually asks your gateway.** This is the step that
+quietly breaks it. Local records only apply to clients resolving *through* the
+gateway. Devices handed DNS by its DHCP do that by default, but plenty of IoT
+hardware ignores the offer and hardcodes a public resolver. If the panel never
+loads, that is the first thing to check — a UniFi firewall rule redirecting
+outbound port 53 to the gateway forces the issue.
+
+**4 — getting past verification.** If the check only resolves the name, the
+public `A` record alone is enough. If it also fetches, briefly forward
+`WAN:8080 → 192.168.1.50:8080`, add the private app, then remove the forward.
+The URL is stored once; the device resolves it locally from then on.
+
+That last step assumes verification happens only when adding an app. If Glance
+ever re-verifies, the entry would break and the forward would have to stay —
+at which point set an access token.
+
 
 ### Access token
 
@@ -519,10 +576,12 @@ on the same network is explicitly blessed in the Glance docs. Copy the project
 across however you like, then `sudo bash deploy/install.sh`. On macOS, use
 `deploy/com.glance.pngserver.plist.example` (a launchd agent) instead.
 
-If the device is *not* on the same network as the server, you need a public
-URL after all: `cloudflared tunnel --url http://localhost:8080` gives you one
-free, without port forwarding. Note the device speaks plain HTTP, so a tunnel
-that forces HTTPS-only may not work.
+If the device is *not* on the same network as the server, you need a publicly
+reachable URL — and it has to be **plain HTTP**, because that is all the device
+speaks. A port forward on your router is the straightforward answer. A quick
+`cloudflared` tunnel is not: it gives you an `https://` hostname that redirects
+HTTP to HTTPS, which an HTTP-only client cannot follow. Set an access token on
+anything you expose this way.
 
 ## Adding a scene
 
