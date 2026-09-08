@@ -269,35 +269,31 @@ tools/render.py text -p text=HELLO -p color=amber
 The device fetches over your LAN, so the container just needs a **static IP**
 and an open port. No tunnel, no port forwarding, no certificate.
 
-> The Glance stores the URL you give it. If the container's address later
-> changes, the panel keeps redrawing its last cached frame and looks perfectly
-> healthy while fetching nothing. Pin the address.
-
-**1 — create the container** (on the Proxmox host, as root):
-
-```bash
-scp deploy/proxmox-create-lxc.sh root@proxmox:/tmp/
-ssh root@proxmox 'IP=192.168.1.50/24 GW=192.168.1.1 bash /tmp/proxmox-create-lxc.sh'
-```
-
-An unprivileged Debian LXC, 1 core / 512 MB / 4 GB — more than this service
-needs. It picks the newest Debian template available, downloads it if missing,
-and authorises the Proxmox host's SSH keys so the next step just works.
-Override any of `CTID HOSTNAME BRIDGE STORAGE DISK CORES MEMORY SSH_PUBKEY`.
-
-**2 — push the code and install** (from your Mac, in the project directory):
+Everything runs from your Mac over **one SSH hop to the Proxmox host**. Inside
+the container the work happens through `pct exec` and `pct push`, so the
+container never needs `sshd`, authorised keys, or to be reachable from your
+laptop at all.
 
 ```bash
-CT_HOST=192.168.1.50 deploy/sync.sh
-ssh root@192.168.1.50 'bash /opt/glance-png-server/deploy/install.sh'
+# first time -- creates the container, installs, starts it
+deploy/pve-deploy.sh --pve root@proxmox --ip 192.168.1.50/24 --gw 192.168.1.1
+
+# every time after -- finds the container by name and updates it
+deploy/pve-deploy.sh --pve root@proxmox
 ```
 
-`install.sh` creates a `glance` system user, builds the venv, writes a hardened
-systemd unit, enables it at boot, and waits for `/healthz` to answer before
-reporting success. It prints the exact URL to paste into the Glance app.
+That's the whole deployment. The script is idempotent: same command to create
+and to update, so it doubles as the art loop — export a PNG into
+`assets/static/`, run it again, done.
 
-**3 — point the device at it.** In the GLANCE Setup App: *Apps → Private Apps →
-+*, then:
+> **The static IP is required, not a suggestion.** The Glance stores the URL
+> you give it. If the container's address later changes, the panel keeps
+> redrawing its last cached frame and looks perfectly healthy while fetching
+> nothing. The script refuses to create a container without `--ip`.
+> (`--ip dhcp` is there if you'd rather pin it by MAC reservation instead.)
+
+Then point the Glance private app at the URL it prints — GLANCE Setup App →
+*Apps* → *Private Apps* → *+*:
 
 ```
 http://192.168.1.50:8080/c/main.png
@@ -306,39 +302,51 @@ http://192.168.1.50:8080/c/main.png
 Set the refresh to 300s (60s is the floor). With four scenes in rotation that
 cycles the whole set in 20 minutes.
 
-### Serving on port 80
+### What it does
 
-To drop the `:8080` from the URL, install with `PORT=80`:
+1. Packages the project locally, excluding `.venv`, `.git`, `.env`, and the
+   container's own runtime state.
+2. `scp`s that to the Proxmox host.
+3. On the host: creates an unprivileged Debian LXC if one isn't there
+   (1 core / 512 MB / 4 GB, newest Debian template, downloaded if missing),
+   then `pct push`es the code in and runs `install.sh` inside it.
+4. `install.sh` creates a `glance` system user, builds the venv, writes a
+   hardened systemd unit, enables it at boot, and waits for `/healthz` to
+   answer before reporting success.
 
-```bash
-ssh root@192.168.1.50 'PORT=80 bash /opt/glance-png-server/deploy/install.sh'
-```
+It **never** ships `data/state.json`, `data/cache/` or `.env`, and only ships
+`data/todos.json` with `--with-data`. Those belong to the server — copying a
+stale rotation position or ICS cache back over the top would rewind the
+carousel and could serve yesterday's calendar.
 
-The unit already carries `AmbientCapabilities=CAP_NET_BIND_SERVICE`, so the
-non-root service user can bind a privileged port without running as root.
+`--dry-run` prints the exact file list and sends nothing.
 
-### The iteration loop
+### Options
 
-`deploy/sync.sh` is what you'll live in while designing:
+| Flag | Default | |
+|---|---|---|
+| `--pve USER@HOST` | *required* | Proxmox host to ssh to |
+| `--ctid N` | found by name, else next free | container id |
+| `--name NAME` | `glance` | container hostname |
+| `--ip A.B.C.D/NN` | *required when creating* | static address, or `dhcp` |
+| `--gw A.B.C.D` | *required with static ip* | gateway |
+| `--bridge` / `--storage` | `vmbr0` / `local-lvm` | |
+| `--disk` / `--cores` / `--memory` | `4` / `1` / `512` | GB / cores / MB |
+| `--port N` | `8080` | see below |
+| `--timezone TZ` | from `settings.yaml` | container clock |
+| `--with-data` | off | also push `data/todos.json` |
+| `--dry-run` | off | package and list, send nothing |
 
-```bash
-deploy/sync.sh 192.168.1.50              # push code + artwork, restart, health check
-deploy/sync.sh 192.168.1.50 --dry-run    # show what would move
-deploy/sync.sh 192.168.1.50 --with-data  # also push data/todos.json
-```
-
-It deliberately **never** overwrites `data/state.json`, `data/cache/`, `.env`,
-or (unless asked) `data/todos.json` — those belong to the server, and copying a
-stale rotation position or ICS cache over the top would rewind the carousel.
-
-Export a PNG into `assets/static/`, sync, done. Art is cached by mtime, so the
-panel picks it up on its next refresh.
+To drop the `:8080` from the URL, deploy with `--port 80`. The systemd unit
+already carries `AmbientCapabilities=CAP_NET_BIND_SERVICE`, so the non-root
+service user can bind a privileged port without running as root.
 
 ### Operating it
 
 ```bash
-systemctl status glance-png-server
-journalctl -u glance-png-server -f
+ssh root@proxmox "pct exec 150 -- systemctl status glance-png-server"
+ssh root@proxmox "pct exec 150 -- journalctl -u glance-png-server -f"
+
 curl -s http://192.168.1.50:8080/api/status | python3 -m json.tool
 curl -I http://192.168.1.50:8080/c/main.png     # X-Glance-Scene: what it just served
 ```
@@ -347,18 +355,21 @@ If the panel looks frozen, `/api/status` is the first stop — it reports which
 scenes are available, the last calendar error, and where the rotation is.
 
 **Firewall:** if you run the Proxmox firewall, allow inbound TCP on your port
-to the container. Nothing outbound is needed except the calendar fetch.
+to the container. Nothing outbound is needed except the calendar fetch. The
+Glance also has to be on the same network/VLAN — if your IoT devices are
+segmented off, you'll need a rule between the two.
 
 ### Other hosts
 
-The same `install.sh` works on any Debian/Ubuntu box — a Raspberry Pi on the
-same network is explicitly blessed in the Glance docs. On macOS, use
+`deploy/install.sh` works on any Debian/Ubuntu box on its own — a Raspberry Pi
+on the same network is explicitly blessed in the Glance docs. Copy the project
+across however you like, then `sudo bash deploy/install.sh`. On macOS, use
 `deploy/com.glance.pngserver.plist.example` (a launchd agent) instead.
 
 If the device is *not* on the same network as the server, you need a public
 URL after all: `cloudflared tunnel --url http://localhost:8080` gives you one
-free, without port forwarding. Note the device speaks plain HTTP, so a
-tunnel that forces HTTPS-only may not work.
+free, without port forwarding. Note the device speaks plain HTTP, so a tunnel
+that forces HTTPS-only may not work.
 
 ## Adding a scene
 
@@ -447,9 +458,9 @@ assets/static/    your PNGs
 data/             todos.json, rotation state, ICS cache
 tools/render.py   CLI renderer
 deploy/
-  proxmox-create-lxc.sh   run on the Proxmox host: makes the container
-  install.sh              run in the container: venv + systemd service
-  sync.sh                 run on your Mac: push code and art, restart
-  glance-png-server.service   hardened systemd unit template
+  pve-deploy.sh     run on your Mac: the whole deployment, one command
+  _remote-pve.sh    runs on the Proxmox host; drives pct, called by the above
+  install.sh        runs in the container: venv + systemd service
+  glance-png-server.service            hardened systemd unit template
   com.glance.pngserver.plist.example   launchd agent, for macOS instead
 ```
