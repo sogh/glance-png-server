@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Keep the server running on a Mac, across logout and reboot.
+
+    cp deploy/com.glance.pngserver.plist.example ~/Library/LaunchAgents/com.glance.pngserver.plist
+    # replace the three ABSOLUTE paths below, then:
+    launchctl load  ~/Library/LaunchAgents/com.glance.pngserver.plist
+    launchctl start com.glance.pngserver
+
+  Logs land in the project's logs/ directory.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.glance.pngserver</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/PATH/TO/glance-png-server/run.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/glance-png-server</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/glance-png-server/logs/server.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/glance-png-server/logs/server.err</string>
+</dict>
+</plist>

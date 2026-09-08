@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from glance.server import create_app
+
+
+@pytest.fixture
+def client(project: Path) -> TestClient:
+    app = create_app(str(project / "config" / "settings.yaml"))
+    app.state.glance.carousel.min_advance_interval = 0
+    return TestClient(app)
+
+
+def as_image(response) -> Image.Image:
+    return Image.open(BytesIO(response.content))
+
+
+def test_health(client):
+    body = client.get("/healthz").json()
+    assert body["ok"] and "main" in body["channels"]
+
+
+def test_channel_serves_a_panel_sized_png(client):
+    r = client.get("/c/main.png")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert as_image(r).size == (192, 32)
+
+
+def test_the_extension_is_optional(client):
+    """The docs note the url does not need a .png ending."""
+    assert as_image(client.get("/c/main")).size == (192, 32)
+
+
+def test_responses_are_never_cached(client):
+    """Any caching in front of us would freeze the carousel on one frame."""
+    headers = client.get("/c/main.png").headers
+    assert "no-store" in headers["cache-control"]
+
+
+def test_successive_fetches_rotate(client):
+    seen = [client.get("/c/main.png").headers["x-glance-scene"] for _ in range(4)]
+    assert len(set(seen)) > 1
+    assert seen[0] == seen[2] and seen[1] == seen[3]
+
+
+def test_position_header_reports_where_we_are(client):
+    assert client.get("/c/main.png").headers["x-glance-position"] == "1/2"
+
+
+def test_peek_does_not_advance_the_rotation(client):
+    first = client.get("/c/main.png?peek=1").headers["x-glance-scene"]
+    for _ in range(3):
+        assert client.get("/c/main.png?peek=1").headers["x-glance-scene"] == first
+
+
+def test_a_single_scene_can_be_pinned(client):
+    r = client.get("/s/clock.png")
+    assert r.status_code == 200 and as_image(r).size == (192, 32)
+
+
+def test_scene_params_come_from_the_query_string(client):
+    a = client.get("/s/text.png?text=HELLO").content
+    b = client.get("/s/text.png?text=GOODBYE").content
+    assert a != b
+
+
+def test_static_art_is_addressable_by_filename(client, project):
+    Image.new("RGB", (192, 32), (0, 128, 255)).save(
+        project / "assets" / "static" / "art.png"
+    )
+    img = as_image(client.get("/s/static:art.png"))
+    assert img.convert("RGB").getpixel((96, 16)) == (0, 128, 255)
+
+
+def test_oversized_art_is_scaled_to_the_panel(client, project):
+    Image.new("RGB", (1920, 320), (255, 0, 0)).save(
+        project / "assets" / "static" / "big.png"
+    )
+    assert as_image(client.get("/s/static:big.png")).size == (192, 32)
+
+
+def test_an_unknown_scene_draws_an_error_card_rather_than_failing(client):
+    """A 500 leaves the device showing its last cached frame, which is
+    indistinguishable from everything working."""
+    r = client.get("/s/does-not-exist.png")
+    assert r.status_code == 200
+    assert as_image(r).size == (192, 32)
+    assert "missing" in r.headers["x-glance-scene"]
+
+
+def test_a_scene_that_raises_still_returns_a_png(client, monkeypatch):
+    from glance.scenes import REGISTRY
+
+    def boom(ctx, params):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(REGISTRY["clock"], "render_fn", boom)
+    r = client.get("/s/clock.png")
+    assert r.status_code == 200
+    assert as_image(r).size == (192, 32)
+    assert r.headers["x-glance-scene"].startswith("error:")
+
+
+def test_an_unknown_channel_draws_an_error_card(client):
+    r = client.get("/c/nope.png")
+    assert r.status_code == 200 and as_image(r).size == (192, 32)
+
+
+def test_a_channel_with_nothing_available_falls_back(client, project):
+    import yaml
+
+    cfg = project / "config" / "settings.yaml"
+    data = yaml.safe_load(cfg.read_text())
+    data["channels"]["empty"] = [{"scene": "agenda"}]     # no ics url configured
+    cfg.write_text(yaml.safe_dump(data))
+
+    app = create_app(str(cfg))
+    r = TestClient(app).get("/c/empty.png")
+    assert r.status_code == 200
+    assert r.headers["x-glance-scene"].startswith("fallback:")
+
+
+def test_status_reports_why_a_scene_is_or_is_not_showing(client):
+    body = client.get("/api/status").json()
+    assert body["panel"] == {"width": 192, "height": 32}
+    assert body["channels"]["main"]["available"] == ["todos(count=3)", "clock"]
+    assert body["sources"]["todos"]["open"] == 2
+    assert "clock" in body["scenes"]
+
+
+def test_reset_rewinds_the_rotation(client):
+    client.get("/c/main.png")
+    client.get("/c/main.png")
+    assert client.post("/api/reset/main").json() == {"reset": "main"}
+    assert client.get("/c/main.png").headers["x-glance-position"] == "1/2"
+
+
+def test_preview_page_renders(client):
+    r = client.get("/preview")
+    assert r.status_code == 200
+    assert "/c/main.png?peek=1" in r.text
+
+
+def test_root_redirects_to_the_preview(client):
+    assert client.get("/", follow_redirects=False).status_code in (302, 307)
+
+
+def test_every_served_png_stays_well_under_the_one_megabyte_cap(client):
+    for path in ("/c/main.png", "/s/clock.png", "/s/todos.png", "/s/countdown.png"):
+        assert len(client.get(path).content) < 100_000

@@ -1,0 +1,81 @@
+# ---------------------------------------------------------------------------
+# Holidays.
+#
+# Pin a date one of three ways:
+#   date: "12-25"                            fixed month-day
+#   rule: {nth: 4, weekday: thu, month: 11}  nth weekday (-1 = last)
+#   rule: {easter_offset: -2}                days relative to Easter Sunday
+#
+# window:    days BEFORE the date it starts showing
+# after:     days AFTER the date it keeps showing
+# countdown: show "IN 3 DAYS" during the lead-up
+# image:     a file in assets/static/ to use instead of the generated card
+# ---------------------------------------------------------------------------
+
+- name: "New Year's Day"
+  slug: new-year
+  date: "01-01"
+  window: 3
+  after: 0
+  color: white
+  accent: amber
+  countdown: true
+
+- name: Valentine's
+  date: "02-14"
+  window: 5
+  color: pink
+  accent: crimson
+  countdown: true
+
+- name: St Patrick's
+  date: "03-17"
+  window: 3
+  color: lime
+  accent: forest
+  countdown: true
+
+- name: Easter
+  rule: { easter_offset: 0 }
+  window: 5
+  color: mint
+  accent: purple
+  countdown: true
+
+- name: Halloween
+  date: "10-31"
+  window: 7
+  color: orange
+  accent: purple
+  countdown: true
+  # Drop a 192x32 PNG at assets/static/halloween.png and uncomment to use it:
+  # image: halloween
+
+- name: Thanksgiving
+  rule: { nth: 4, weekday: thu, month: 11 }
+  window: 5
+  color: amber
+  accent: brown
+  countdown: true
+
+- name: Christmas
+  date: "12-25"
+  window: 14
+  after: 1
+  color: green
+  accent: red
+  countdown: true
+  # image: christmas
+
+- name: Memorial Day
+  rule: { nth: -1, weekday: mon, month: 5 }
+  window: 2
+  color: white
+  accent: blue
+
+- name: Independence Day
+  date: "07-04"
+  window: 4
+  color: white
+  accent: red
+  countdown: true

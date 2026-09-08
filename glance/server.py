@@ -1,0 +1,183 @@
+"""HTTP layer. The device only ever needs GET /c/<channel>.png.
+
+Everything else here exists for you, not the panel: a preview page for
+designing at 192x32 on a normal monitor, and a status endpoint for working out
+why a scene is not showing.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+from .runtime import GlanceApp
+from .scenes import REGISTRY
+from .scenes.static_image import list_static
+
+log = logging.getLogger("glance")
+
+# The device caches the image itself between refreshes, so any caching in
+# front of us would only ever serve a stale frame and break the rotation.
+NO_CACHE = "no-store, no-cache, must-revalidate, max-age=0"
+
+
+def _coerce(value: str) -> Any:
+    """Query strings are all text; scene params want real types."""
+    low = value.lower()
+    if low in ("true", "yes", "on"):
+        return True
+    if low in ("false", "no", "off"):
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def _params(request: Request, drop: set[str]) -> dict[str, Any]:
+    return {k: _coerce(v) for k, v in request.query_params.items() if k not in drop}
+
+
+def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) -> Response:
+    headers = {
+        "Cache-Control": NO_CACHE,
+        "Pragma": "no-cache",
+        "X-Glance-Scene": label,
+        "Content-Length": str(len(body)),
+    }
+    headers.update(extra or {})
+    return Response(content=body, media_type="image/png", headers=headers)
+
+
+def create_app(config_path: str | None = None) -> FastAPI:
+    glance = GlanceApp.from_config(config_path or os.environ.get("GLANCE_CONFIG"))
+    api = FastAPI(title="Glance PNG Server", version="1.0", docs_url="/api/docs")
+    api.state.glance = glance
+
+    @api.get("/", include_in_schema=False)
+    def index() -> RedirectResponse:
+        return RedirectResponse("/preview")
+
+    @api.get("/healthz")
+    def healthz() -> dict[str, Any]:
+        return {"ok": True, "channels": sorted(glance.settings.channels)}
+
+    @api.get("/api/status")
+    def status() -> JSONResponse:
+        return JSONResponse(glance.status(), headers={"Cache-Control": NO_CACHE})
+
+    @api.post("/api/reset")
+    @api.post("/api/reset/{channel}")
+    def reset(channel: str | None = None) -> dict[str, Any]:
+        """Put a channel's rotation back to its first available scene."""
+        glance.carousel.reset(channel)
+        return {"reset": channel or "all"}
+
+    # --- the endpoint the Glance actually points at ------------------------
+
+    @api.get("/c/{channel}")
+    def channel_png(channel: str, request: Request) -> Response:
+        name = channel[:-4] if channel.endswith(".png") else channel
+        # ?peek=1 renders without consuming a rotation slot -- used by the
+        # preview page so opening it in a browser does not skip scenes.
+        peek = request.query_params.get("peek") in ("1", "true", "yes")
+        canvas, selection, label = glance.render_channel(name, advance=not peek)
+        extra = {"X-Glance-Channel": name}
+        if selection is not None:
+            extra["X-Glance-Position"] = f"{selection.position + 1}/{selection.total}"
+            if selection.takeover:
+                extra["X-Glance-Takeover"] = "1"
+        return _png_response(glance.png(canvas), label, extra)
+
+    @api.get("/s/{ref}")
+    def scene_png(ref: str, request: Request) -> Response:
+        name = ref[:-4] if ref.endswith(".png") else ref
+        canvas, label = glance.render_scene(name, _params(request, {"peek"}))
+        return _png_response(glance.png(canvas), label)
+
+    # --- preview ------------------------------------------------------------
+
+    @api.get("/preview", response_class=HTMLResponse)
+    def preview(request: Request) -> HTMLResponse:
+        ctx = glance.context()
+        zoom = int(request.query_params.get("zoom", 4))
+        info = glance.status()
+
+        def frame(src: str, title: str, note: str = "") -> str:
+            return (
+                f'<figure><img src="{src}" alt="{title}" '
+                f'style="width:{glance.settings.width * zoom}px">'
+                f"<figcaption><b>{title}</b>"
+                + (f"<span>{note}</span>" if note else "")
+                + "</figcaption></figure>"
+            )
+
+        parts: list[str] = []
+        for name, meta in info["channels"].items():
+            avail = ", ".join(meta["available"]) or "nothing available"
+            parts.append(
+                f"<h2>channel <code>{name}</code></h2>"
+                f'<p class="meta">/c/{name}.png &middot; {len(meta["available"])} '
+                f"of {meta['configured']} showing &middot; {avail}</p>"
+                + frame(f"/c/{name}.png?peek=1", f"{name} (current)")
+            )
+
+        scene_frames = "".join(
+            frame(f"/s/{sid}.png", sid, REGISTRY[sid].description
+                  if hasattr(REGISTRY[sid], "description") else "")
+            for sid in sorted(REGISTRY) if sid != "static"
+        )
+        static_frames = "".join(
+            frame(f"/s/static:{n}.png", f"static:{n}") for n in list_static(ctx)
+        )
+
+        html = f"""<!doctype html><meta charset="utf-8">
+<title>Glance preview</title>
+<style>
+ :root {{ color-scheme: dark; }}
+ body {{ background:#101014; color:#c8c8d0; font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+        margin:0; padding:24px 28px 60px; }}
+ h1 {{ font-size:15px; letter-spacing:.14em; text-transform:uppercase; color:#fff; margin:0 0 4px; }}
+ h2 {{ font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#7f8; margin:32px 0 2px; }}
+ h3 {{ font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#89f; margin:36px 0 8px;
+       border-top:1px solid #26262e; padding-top:16px; }}
+ p.meta {{ color:#6a6a78; margin:0 0 10px; }}
+ code {{ color:#fd8; }}
+ figure {{ margin:0 0 18px; }}
+ img {{ image-rendering:pixelated; display:block; background:#000;
+        border:1px solid #2a2a34; border-radius:2px; max-width:100%; }}
+ figcaption {{ display:flex; gap:12px; padding-top:5px; color:#8a8a98; }}
+ figcaption span {{ color:#5a5a68; }}
+ .grid {{ display:flex; flex-wrap:wrap; gap:20px; }}
+ a {{ color:#7cf; }}
+</style>
+<h1>Glance preview &mdash; {glance.settings.width}&times;32 at {zoom}&times;</h1>
+<p class="meta">{info['now']} &middot; carousel <code>{info['carousel']['mode']}</code>
+ &middot; <a href="/api/status">status json</a>
+ &middot; <a href="?zoom={3 if zoom != 3 else 5}">toggle zoom</a></p>
+{"".join(parts) or "<p class='meta'>No channels configured.</p>"}
+<h3>All scenes</h3><div class="grid">{scene_frames}</div>
+<h3>Static artwork ({len(list_static(ctx))})</h3><div class="grid">{static_frames
+    or "<p class='meta'>Drop PNGs into assets/static/ to see them here.</p>"}</div>
+<script>
+ // Reload just the images so the page does not jump while you iterate on art.
+ setInterval(() => document.querySelectorAll('img').forEach(i => {{
+   const u = new URL(i.src, location.href);
+   u.searchParams.set('_', Date.now());
+   i.src = u.pathname + u.search;
+ }}), 10000);
+</script>"""
+        return HTMLResponse(html, headers={"Cache-Control": NO_CACHE})
+
+    return api
+
+
+app = create_app()

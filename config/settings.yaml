@@ -1,0 +1,90 @@
+# ---------------------------------------------------------------------------
+# Glance PNG server
+#
+# The device only ever fetches ONE url per private app slot. What that url
+# returns is decided here.
+# ---------------------------------------------------------------------------
+
+timezone: America/Los_Angeles
+
+panel:
+  # Glance panels are 64px modules that daisy-chain. Height is always 32.
+  # The docs recommend keeping private-app art at 192x32 or smaller.
+  width: 192
+  quantize_png: true          # palette-encode the PNG; typically 300-3000 bytes
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+carousel:
+  # advance = step to the next scene on every real fetch from the device.
+  # clock   = pick purely from wall-clock time (stateless, but can skip scenes
+  #           when the device's refresh interval and dwell don't line up).
+  mode: advance
+  dwell: 300                  # seconds per scene, clock mode only
+
+  # Two fetches closer together than this show the same scene rather than
+  # advancing twice. Stops a device retry, a browser tab or an uptime check
+  # from silently skipping a scene. The device refreshes at most once a
+  # minute, so this can sit well below 60 without ever blocking a real fetch.
+  min_advance_interval: 30
+
+# Shown when nothing in a channel has anything to display.
+fallback:
+  scene: clock
+  params:
+    hour24: false
+
+sources:
+  calendar:
+    # Google Calendar -> Settings -> your calendar -> "Secret address in iCal
+    # format". Put it in .env as GLANCE_ICS_URL; it is a password, keep it out
+    # of version control.
+    ics_url: "${GLANCE_ICS_URL}"
+    refresh: 900              # seconds between calendar fetches
+    lookahead_days: 14
+  todos:
+    path: data/todos.json
+
+# ---------------------------------------------------------------------------
+# Channels. Each one is a rotation served at /c/<name>.png
+#
+# Entries are tried in order. Any entry with nothing to show (no events, no
+# open todos, missing art file) drops out of the rotation automatically.
+#
+#   takeover: true   pre-empt the whole rotation while this has content
+#   when: {...}      only consider this entry inside a time window
+#   params: {...}    passed to the scene
+# ---------------------------------------------------------------------------
+channels:
+
+  main:
+    # A live holiday owns the panel outright.
+    - scene: holiday
+      takeover: true
+
+    # Next thing on the calendar.
+    - scene: agenda
+      params:
+        count: 1
+        hour24: false
+
+    # Top three open todos.
+    - scene: todos
+      params:
+        count: 3
+        header: true
+
+    # Hand-made artwork. Anything in assets/static/ works: `static:<filename>`.
+    - scene: static:example-stripes
+
+    # Waking hours only -- no point burning a slot on a clock at 3am.
+    - scene: clock
+      when:
+        hours: { from: 7, to: 22 }
+
+  # A second slot you could point another private app at.
+  agenda-only:
+    - scene: agenda
+      params: { count: 3 }
