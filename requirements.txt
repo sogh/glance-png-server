@@ -1,5 +1,11 @@
 fastapi==0.141.1
-uvicorn[standard]==0.52.4
+
+# Plain uvicorn, deliberately not uvicorn[standard]. uvloop and httptools add
+# nothing when the workload is a ~300 byte response every five minutes, and
+# keeping the runtime install pure-python means it builds anywhere without a
+# compiler. The [standard] extra lives in requirements-dev.txt for --reload.
+uvicorn==0.52.4
+
 pillow==12.3.0
 PyYAML==6.0.3
 httpx==0.28.1

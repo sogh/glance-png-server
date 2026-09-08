@@ -1,0 +1,53 @@
+# systemd unit for the Glance PNG server.
+# Installed to /etc/systemd/system/glance-png-server.service by deploy/install.sh.
+
+[Unit]
+Description=Glance PNG server (private-app image source for a Glance Scroll)
+Documentation=https://glance-led.dev/docs/private-apps/
+After=network-online.target
+Wants=network-online.target
+
+# The device caches its last successful fetch, so a crash-loop looks exactly
+# like a working panel. Give up after 10 restarts in 5 minutes so the failure
+# is visible in `systemctl status` rather than churning silently forever.
+# (These are [Unit] directives -- systemd ignores them under [Service].)
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=__USER__
+Group=__USER__
+WorkingDirectory=__ROOT__
+
+# Optional. The leading '-' means "skip silently if absent", so the service
+# still starts before you have added a calendar URL.
+EnvironmentFile=-__ROOT__/.env
+
+ExecStart=__ROOT__/.venv/bin/python -m uvicorn glance.server:app \
+    --host __HOST__ --port __PORT__ --log-level info
+
+Restart=always
+RestartSec=5s
+
+# --- hardening ------------------------------------------------------------
+# The service reads config and art, writes rotation state and the ICS cache,
+# and needs nothing else on the filesystem.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+ReadWritePaths=__ROOT__/data __ROOT__/logs
+
+# Binding port 80 as a non-root user needs this capability. Harmless on 8080.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

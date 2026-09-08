@@ -25,16 +25,25 @@ From the [Glance developer docs](https://glance-led.dev/docs/private-apps/):
 | Canvas width | 1–384px (64px panel modules); **192×32 recommended** |
 | Format | **PNG only** — JPEG is not decoded |
 | Colour | full RGB (name, `#hex`, or `(r,g,b)`) |
-| Transport | plain HTTP `GET`, public URL, no file extension needed |
+| Transport | plain HTTP `GET` — **HTTPS is not supported**; no file extension needed |
+| Who fetches | **the device itself, over your own network** — not Glance's servers |
 | Response size | **1 MB** cap |
 | Request timeout | **~4 seconds** |
 | Refresh interval | 60s practical minimum, **300s default** |
 | Private apps per device | 10 |
 
 The device caches the image it fetched and redraws that between refreshes, so
-it only hits your server once per interval. **Everything this server emits is
-public** — the docs are explicit that you should treat any image on a Glance as
-readable by a stranger. Don't put anything on it you wouldn't post publicly.
+it only hits your server once per interval.
+
+The device does its own fetching — *"Your Glance fetches that image directly
+over your own network and caches it on the device itself."* Glance's servers
+only store the URL string so the device knows where to look; the image is never
+uploaded to, stored on, or proxied through them. **That means a LAN address
+works and no tunnel is needed**, as long as the device and the server are on
+the same network.
+
+Traffic is unencrypted and the URL is stored on Glance's servers, so treat
+anything the panel displays as public. Don't put on it what you wouldn't post.
 
 Typical frames here come out at **150–600 bytes**, roughly 0.05% of the cap.
 
@@ -255,28 +264,101 @@ tools/render.py text -p text=HELLO -p color=amber
 
 ---
 
-## Exposing it to the device
+## Deploying to Proxmox
 
-The Glance fetches over the public internet, so the server needs a public URL.
+The device fetches over your LAN, so the container just needs a **static IP**
+and an open port. No tunnel, no port forwarding, no certificate.
 
-**Cloudflare Tunnel** (no port forwarding, free):
+> The Glance stores the URL you give it. If the container's address later
+> changes, the panel keeps redrawing its last cached frame and looks perfectly
+> healthy while fetching nothing. Pin the address.
+
+**1 — create the container** (on the Proxmox host, as root):
 
 ```bash
-brew install cloudflared
-cloudflared tunnel --url http://localhost:8080
-# prints https://something.trycloudflare.com -> use /c/main.png on that host
+scp deploy/proxmox-create-lxc.sh root@proxmox:/tmp/
+ssh root@proxmox 'IP=192.168.1.50/24 GW=192.168.1.1 bash /tmp/proxmox-create-lxc.sh'
 ```
 
-For a stable hostname, create a named tunnel against a domain you control.
-**Tailscale Funnel** works too if you'd rather stay in that ecosystem.
+An unprivileged Debian LXC, 1 core / 512 MB / 4 GB — more than this service
+needs. It picks the newest Debian template available, downloads it if missing,
+and authorises the Proxmox host's SSH keys so the next step just works.
+Override any of `CTID HOSTNAME BRIDGE STORAGE DISK CORES MEMORY SSH_PUBKEY`.
 
-### Keeping it running
+**2 — push the code and install** (from your Mac, in the project directory):
 
-`deploy/com.glance.pngserver.plist.example` is a launchd agent for macOS —
-edit the three absolute paths, copy to `~/Library/LaunchAgents/`, then
-`launchctl load`. Logs land in `logs/`.
+```bash
+CT_HOST=192.168.1.50 deploy/sync.sh
+ssh root@192.168.1.50 'bash /opt/glance-png-server/deploy/install.sh'
+```
 
----
+`install.sh` creates a `glance` system user, builds the venv, writes a hardened
+systemd unit, enables it at boot, and waits for `/healthz` to answer before
+reporting success. It prints the exact URL to paste into the Glance app.
+
+**3 — point the device at it.** In the GLANCE Setup App: *Apps → Private Apps →
++*, then:
+
+```
+http://192.168.1.50:8080/c/main.png
+```
+
+Set the refresh to 300s (60s is the floor). With four scenes in rotation that
+cycles the whole set in 20 minutes.
+
+### Serving on port 80
+
+To drop the `:8080` from the URL, install with `PORT=80`:
+
+```bash
+ssh root@192.168.1.50 'PORT=80 bash /opt/glance-png-server/deploy/install.sh'
+```
+
+The unit already carries `AmbientCapabilities=CAP_NET_BIND_SERVICE`, so the
+non-root service user can bind a privileged port without running as root.
+
+### The iteration loop
+
+`deploy/sync.sh` is what you'll live in while designing:
+
+```bash
+deploy/sync.sh 192.168.1.50              # push code + artwork, restart, health check
+deploy/sync.sh 192.168.1.50 --dry-run    # show what would move
+deploy/sync.sh 192.168.1.50 --with-data  # also push data/todos.json
+```
+
+It deliberately **never** overwrites `data/state.json`, `data/cache/`, `.env`,
+or (unless asked) `data/todos.json` — those belong to the server, and copying a
+stale rotation position or ICS cache over the top would rewind the carousel.
+
+Export a PNG into `assets/static/`, sync, done. Art is cached by mtime, so the
+panel picks it up on its next refresh.
+
+### Operating it
+
+```bash
+systemctl status glance-png-server
+journalctl -u glance-png-server -f
+curl -s http://192.168.1.50:8080/api/status | python3 -m json.tool
+curl -I http://192.168.1.50:8080/c/main.png     # X-Glance-Scene: what it just served
+```
+
+If the panel looks frozen, `/api/status` is the first stop — it reports which
+scenes are available, the last calendar error, and where the rotation is.
+
+**Firewall:** if you run the Proxmox firewall, allow inbound TCP on your port
+to the container. Nothing outbound is needed except the calendar fetch.
+
+### Other hosts
+
+The same `install.sh` works on any Debian/Ubuntu box — a Raspberry Pi on the
+same network is explicitly blessed in the Glance docs. On macOS, use
+`deploy/com.glance.pngserver.plist.example` (a launchd agent) instead.
+
+If the device is *not* on the same network as the server, you need a public
+URL after all: `cloudflared tunnel --url http://localhost:8080` gives you one
+free, without port forwarding. Note the device speaks plain HTTP, so a
+tunnel that forces HTTPS-only may not work.
 
 ## Adding a scene
 
@@ -364,4 +446,10 @@ config/           settings.yaml, holidays.yaml
 assets/static/    your PNGs
 data/             todos.json, rotation state, ICS cache
 tools/render.py   CLI renderer
+deploy/
+  proxmox-create-lxc.sh   run on the Proxmox host: makes the container
+  install.sh              run in the container: venv + systemd service
+  sync.sh                 run on your Mac: push code and art, restart
+  glance-png-server.service   hardened systemd unit template
+  com.glance.pngserver.plist.example   launchd agent, for macOS instead
 ```
