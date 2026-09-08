@@ -95,6 +95,10 @@ echo
 echo "    Point the Glance private app at:"
 echo "        http://${IP}${SUFFIX}/c/main.png"
 echo
+echo "    If the setup app rejects that with \"DNS resolve failed\", use the"
+echo "    publicly-resolvable alias (still served over your LAN):"
+echo "        http://${IP}.nip.io${SUFFIX}/c/main.png"
+echo
 echo "    Preview in a browser on your network:"
 echo "        http://${IP}${SUFFIX}/preview"
 echo

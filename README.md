@@ -343,6 +343,63 @@ To drop the `:8080` from the URL, deploy with `--port 80`. The systemd unit
 already carries `AmbientCapabilities=CAP_NET_BIND_SERVICE`, so the non-root
 service user can bind a privileged port without running as root.
 
+### If the setup app rejects the URL
+
+Adding a private app runs a verification step the developer docs do not
+describe. It can fail on a LAN address with:
+
+```
+image verification failed. DNS resolve failed for 192.168.1.50
+```
+
+A literal IPv4 address needs no DNS to resolve, so that message is really
+saying *something in the verification path cannot reach RFC1918 space*. The
+likeliest reason is that the check runs on Glance's servers rather than on the
+device — blocking requests to private ranges is standard SSRF protection on
+any cloud service, and it commonly surfaces as a resolution error. The device
+itself would still fetch the image over your LAN quite happily afterwards.
+
+**First, rule out the boring cause.** Open `http://<ip>:8080/preview` in a
+browser *on your phone*, on the same wifi. If that fails, the phone is on
+cellular or a guest VLAN and nothing else here matters. If it works and the
+setup app still refuses, the check is not coming from the phone.
+
+**Then try a publicly resolvable alias.** `nip.io` and `sslip.io` are wildcard
+DNS services that resolve `<any-ip>.nip.io` to that IP — including private
+ones. Public DNS resolution succeeds while the connection still happens
+entirely on your LAN:
+
+```
+http://192.168.1.50.nip.io:8080/c/main.png
+```
+
+Verified against Google, Cloudflare and Quad9: `192.168.1.50.nip.io` resolves
+to `192.168.1.50` from all three. This fixes the problem **if** verification
+only resolves the name. If it also fetches the image, it will still fail —
+their server will resolve the alias to a private address it cannot reach.
+
+Relying on a free DNS service is a mild dependency: if it is down, the device
+gets a resolution failure and keeps showing its cached frame until it
+recovers. An `A` record on a domain you own, pointing at the LAN address, is
+the durable version of the same trick.
+
+**If verification really does fetch,** the URL has to be reachable from the
+internet at setup time and a tunnel is the answer:
+
+```bash
+cloudflared tunnel --url http://192.168.1.50:8080
+```
+
+Weigh that properly. A public URL means the panel's contents are genuinely
+public — fine for holiday artwork, a real consideration for calendar entries
+and todos. The Glance docs already tell you to treat anything on the display
+as readable by a stranger, but a LAN-only URL made that mostly theoretical,
+and a tunnel does not.
+
+You can also split the difference: point the Glance at a channel that only
+carries non-sensitive scenes, and keep the calendar and todo channels on
+LAN-only URLs used by something else.
+
 ### If the container will not start
 
 `pct create` can succeed and `pct start` still fail. The deploy script stops

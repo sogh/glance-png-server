@@ -180,6 +180,12 @@ cat <<MSG
     Point the Glance private app at   http://${CT_IP}${SUFFIX}/c/main.png
     Preview from any browser at       http://${CT_IP}${SUFFIX}/preview
 
+    If the Glance setup app rejects that with "DNS resolve failed", its
+    check cannot see RFC1918 addresses. Use the resolvable alias instead --
+    it is public in DNS but still connects over your LAN:
+
+        http://${CT_IP}.nip.io${SUFFIX}/c/main.png
+
     logs:     ssh $PVE "pct exec $CTID -- journalctl -u glance-png-server -f"
     status:   curl -s http://${CT_IP}${SUFFIX}/api/status
     redeploy: deploy/pve-deploy.sh --pve $PVE
