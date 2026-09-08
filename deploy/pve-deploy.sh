@@ -25,7 +25,14 @@
 #   --port N          port to serve on                  (default: 8080)
 #   --timezone TZ     container timezone       (default: from settings.yaml)
 #   --with-data       also push data/todos.json
+#   --privileged      create a privileged container         (see note below)
 #   --dry-run         build the tarball, show contents, change nothing
+#
+# --privileged is a fallback, not a default. Unprivileged containers are the
+# safer choice and what you should use if they work. But on some hosts --
+# notably the ARM Proxmox builds -- unprivileged LXCs fail to spawn with
+# AppArmor or idmap errors. If the container will not start, this is the
+# quickest way to find out whether that is why.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,6 +42,7 @@ STORAGE="${STORAGE:-local-lvm}"; TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
 DISK="${DISK:-4}"; CORES="${CORES:-1}"; MEMORY="${MEMORY:-512}"
 PORT="${PORT:-8080}"; TIMEZONE="${TIMEZONE:-}"
 REMOTE_ROOT="${REMOTE_ROOT:-/opt/glance-png-server}"
+UNPRIVILEGED="${UNPRIVILEGED:-1}"
 WITH_DATA=0; DRY=0
 
 while [[ $# -gt 0 ]]; do
@@ -52,8 +60,9 @@ while [[ $# -gt 0 ]]; do
     --port)      PORT="$2"; shift 2 ;;
     --timezone)  TIMEZONE="$2"; shift 2 ;;
     --with-data) WITH_DATA=1; shift ;;
+    --privileged) UNPRIVILEGED=0; shift ;;
     --dry-run)   DRY=1; shift ;;
-    -h|--help)   sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)           echo "unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -136,11 +145,18 @@ echo "==> copying to $PVE"
 scp -q "$TARBALL" "$PVE:/tmp/glance-deploy.$$.tar.gz"
 scp -q "$ROOT/deploy/_remote-pve.sh" "$PVE:$REMOTE_SCRIPT_TMP"
 
+# Passed as environment variables rather than positionally -- fifteen ordered
+# arguments is a silent-corruption bug waiting to happen.
+REMOTE_ENV=(
+  "GL_CTID='$CTID'" "GL_NAME='$CT_NAME'" "GL_IP='$IP'" "GL_GW='$GW'"
+  "GL_BRIDGE='$BRIDGE'" "GL_STORAGE='$STORAGE'" "GL_TEMPLATE_STORAGE='$TEMPLATE_STORAGE'"
+  "GL_DISK='$DISK'" "GL_CORES='$CORES'" "GL_MEMORY='$MEMORY'"
+  "GL_TARBALL='/tmp/glance-deploy.$$.tar.gz'" "GL_ROOT='$REMOTE_ROOT'"
+  "GL_PORT='$PORT'" "GL_TIMEZONE='$TIMEZONE'" "GL_UNPRIVILEGED='$UNPRIVILEGED'"
+)
+
 set +e
-OUTPUT="$(ssh "$PVE" "bash '$REMOTE_SCRIPT_TMP' \
-  '$CTID' '$CT_NAME' '$IP' '$GW' '$BRIDGE' '$STORAGE' \
-  '$DISK' '$CORES' '$MEMORY' '/tmp/glance-deploy.$$.tar.gz' \
-  '$REMOTE_ROOT' '$PORT' '$TIMEZONE' '$TEMPLATE_STORAGE'; \
+OUTPUT="$(ssh "$PVE" "${REMOTE_ENV[*]} bash '$REMOTE_SCRIPT_TMP'; \
   rc=\$?; rm -f '$REMOTE_SCRIPT_TMP' '/tmp/glance-deploy.$$.tar.gz'; exit \$rc" 2>&1)"
 RC=$?
 set -e

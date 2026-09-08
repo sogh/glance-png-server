@@ -335,11 +335,48 @@ carousel and could serve yesterday's calendar.
 | `--port N` | `8080` | see below |
 | `--timezone TZ` | from `settings.yaml` | container clock |
 | `--with-data` | off | also push `data/todos.json` |
+| `--privileged` | off | privileged container — fallback, see below |
 | `--dry-run` | off | package and list, send nothing |
 
 To drop the `:8080` from the URL, deploy with `--port 80`. The systemd unit
 already carries `AmbientCapabilities=CAP_NET_BIND_SERVICE`, so the non-root
 service user can bind a privileged port without running as root.
+
+### If the container will not start
+
+`pct create` can succeed and `pct start` still fail, typically like this:
+
+```
+sync_wait: 34 An error occurred in another process (expected sequence number 7)
+__lxc_start: 2126 Failed to spawn container "101"
+```
+
+The deploy script stops at that point and prints `pct config`, the tail of
+`pct start --debug`, and `/var/log/lxc/<ctid>.log` — the failure is almost
+always named in one of those three.
+
+The usual cause is the **unprivileged** container: LXC maps the container's
+users into a host uid range, and if AppArmor or `/etc/subuid` and
+`/etc/subgid` are not cooperating, it dies during spawn. This is a known rough
+edge on the **ARM builds of Proxmox** in particular.
+
+To find out whether that is it, destroy the failed container and retry
+privileged:
+
+```bash
+ssh root@proxmox 'pct destroy 101'
+deploy/pve-deploy.sh --pve root@proxmox --ip 192.168.1.50/24 --gw 192.168.1.1 --privileged
+```
+
+If it starts that way, the problem was the uid mapping. A privileged container
+is a weaker boundary — root inside is closer to root outside — so it is worth
+fixing the mapping and going back to unprivileged if you can. For a service on
+your own LAN that renders PNGs, it is a defensible place to land in the
+meantime.
+
+Note the container is created with **no `nesting` feature**. It runs a plain
+Python service, never containers inside containers, and nesting only loosens
+the AppArmor profile.
 
 ### Operating it
 
