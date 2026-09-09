@@ -15,6 +15,7 @@ from typing import Any, Callable, Protocol
 from ..canvas import Canvas
 from ..config import Settings
 from ..sources.holidays import Holiday
+from ..sources.calendars import CalendarSet
 from ..sources.ics import CalendarSource
 from ..sources.todos import TodoSource
 
@@ -26,6 +27,7 @@ class RenderContext:
     settings: Settings
     now: datetime
     calendar: CalendarSource | None = None
+    calendars: CalendarSet | None = None
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
 

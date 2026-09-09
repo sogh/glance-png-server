@@ -113,6 +113,45 @@ def app(project: Path) -> GlanceApp:
     return GlanceApp(load_settings(project / "config" / "settings.yaml"))
 
 
+TAGGED_ICS = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//EN
+BEGIN:VEVENT
+UID:tagged-red@test
+DTSTART;TZID=America/Los_Angeles:20260908T110000
+DTEND;TZID=America/Los_Angeles:20260908T113000
+SUMMARY:Call the plumber #red
+END:VEVENT
+BEGIN:VEVENT
+UID:tagged-desc@test
+DTSTART;TZID=America/Los_Angeles:20260908T130000
+DTEND;TZID=America/Los_Angeles:20260908T133000
+SUMMARY:Grange meeting
+DESCRIPTION:color: green\\nstyle: hero
+END:VEVENT
+BEGIN:VEVENT
+UID:tagged-hidden@test
+DTSTART;TZID=America/Los_Angeles:20260908T150000
+DTEND;TZID=America/Los_Angeles:20260908T153000
+SUMMARY:Not for the panel #hide
+END:VEVENT
+BEGIN:VEVENT
+UID:tagged-plain@test
+DTSTART;TZID=America/Los_Angeles:20260908T170000
+DTEND;TZID=America/Los_Angeles:20260908T173000
+SUMMARY:Pick up the #1 parcel
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+@pytest.fixture(scope="session")
+def tagged_ics_server(ics_server, tmp_path_factory):
+    """Serves a second feed alongside the first, from the same server dir."""
+    root = Path(ics_server.rsplit("/", 1)[0])
+    return ics_server.replace("test.ics", "tagged.ics")
+
+
 @pytest.fixture(scope="session")
 def ics_server(tmp_path_factory):
     """A real HTTP server for the ICS fixture -- exercises the fetch path too."""
@@ -122,6 +161,7 @@ def ics_server(tmp_path_factory):
 
     root = tmp_path_factory.mktemp("ics")
     (root / "test.ics").write_text(ICS)
+    (root / "tagged.ics").write_text(TAGGED_ICS)
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):

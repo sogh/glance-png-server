@@ -19,6 +19,7 @@ from .config import Settings, load_settings
 from .scenes import REGISTRY, RenderContext, error_canvas, resolve
 from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
+from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
 from .sources.todos import TodoSource
 
@@ -30,16 +31,12 @@ class GlanceApp:
         self.settings = settings
         self.carousel = Carousel(settings)
         self.todos = TodoSource(settings.todos_file)
-        self.calendar = (
-            CalendarSource(
-                url=settings.ics_url,
-                cache_dir=settings.cache_dir,
-                tz=settings.tz,
-                refresh=settings.ics_refresh,
-            )
-            if settings.ics_url
-            else None
+        self.calendars = CalendarSet(
+            settings.calendars, settings.cache_dir, settings.tz, settings.ics_refresh
         )
+        # Kept for scenes and callers that just want "the" calendar.
+        first = next(iter(self.calendars.sources.values()), None)
+        self.calendar: CalendarSource | None = self.calendars.get("default") or first
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -71,6 +68,7 @@ class GlanceApp:
             settings=self.settings,
             now=now or datetime.now(self.settings.tz),
             calendar=self.calendar,
+            calendars=self.calendars,
             todos=self.todos,
             holidays=self.holidays,
         )
@@ -152,11 +150,7 @@ class GlanceApp:
                 ],
             },
             "sources": {
-                "calendar": {
-                    "configured": self.calendar is not None,
-                    "last_error": self.calendar.last_error if self.calendar else None,
-                    "upcoming": len(self.calendar.upcoming(ctx.now)) if self.calendar else 0,
-                },
+                "calendars": self.calendars.status(ctx.now),
                 "todos": {
                     "path": str(self.settings.todos_file),
                     "last_error": self.todos.last_error,

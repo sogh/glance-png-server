@@ -288,26 +288,89 @@ At worst 2.5 minutes out in either direction, instead of up to 5 minutes slow.
 
 ## Data sources
 
-### Calendar (Google Calendar or any ICS publisher)
+### Calendars
 
-Google Calendar → Settings → *your calendar* → **Secret address in iCal
-format**. Put it in `.env`:
+One feed per purpose reads better than one feed with everything in it:
+
+```yaml
+sources:
+  calendars:
+    agenda:                              # things with times on them
+      url: "${GLANCE_ICS_AGENDA:-}"
+      color: white
+      accent: amber
+    reminders:                           # things to remember
+      url: "${GLANCE_ICS_REMINDERS:-}"
+      accent: sky
+    events:                              # birthdays, anniversaries
+      url: "${GLANCE_ICS_EVENTS:-}"
+      color: mint
+      accent: purple
+```
+
+Each URL is Google Calendar → Settings → *your calendar* → **Secret address in
+iCal format**. They are passwords; keep them in `.env`. A calendar declared
+without a URL is simply skipped, so you can add them one at a time.
+
+Scenes pick a feed with `calendar:` — one name, several comma-separated, or
+omit it to merge them all:
+
+```yaml
+- scene: agenda
+  params: { calendar: reminders }
+- scene: agenda
+  params: { calendar: "agenda,events" }
+```
+
+Recurrence is expanded locally, so weekly meetings and annual birthdays
+resolve. Feeds are cached to disk and **a failed fetch serves the cached copy
+rather than blanking the panel**.
+
+The older single-feed form still works: `sources.calendar.ics_url` becomes a
+calendar named `default`.
+
+#### Styling entries
+
+**Google's ICS export carries no colour.** No `COLOR`, no `CATEGORIES` — the
+colour you pick in Google Calendar does not survive the export. The fields
+that *do* export are the title, the description and the location, so that is
+where styling has to live.
+
+Per-calendar defaults in `settings.yaml` cover most of it. For a single entry,
+tag it in the title — editable from your phone, and stripped before drawing:
 
 ```
-GLANCE_ICS_URL=https://calendar.google.com/calendar/ical/.../basic.ics
+Call the plumber #red          →  drawn as "Call the plumber", in red
+Bin day #green #big
+Dentist #urgent                →  red, priority 1
+Draft notes #quiet             →  dimmed
+Personal thing #hide           →  stays in the calendar, never on the panel
 ```
 
-That URL is a password — anyone holding it can read the whole calendar. It's
-kept out of `settings.yaml` and `.gitignore`d for that reason.
+Any palette colour name works as a tag, plus `#big` / `#hero`, `#quiet`,
+`#urgent`, `#hide`, `#done`.
 
-Recurrence rules are expanded locally, so weekly standups and annual birthdays
-resolve correctly. The feed is fetched on `sources.calendar.refresh` (default
-900s) and cached to disk — **if the fetch fails, cached events are served
-rather than letting the panel go blank.**
+**A `#word` that is not a known keyword is left alone** — "Pay the #1 invoice"
+renders exactly as typed.
 
-### Todos
+For more, or to keep the title clean, use `key: value` lines in the
+description:
 
-`data/todos.json`, re-read whenever its mtime changes (no restart):
+```
+color: green
+style: hero
+priority: 1
+```
+
+Only `color`, `accent`, `style`, `priority`, `hidden` and `dim` are read, so
+an ordinary description cannot restyle an entry by accident. Title tags beat
+description keys; both beat the calendar's defaults.
+
+### Reminders without a calendar
+
+`data/reminders.json` still exists for anything that does not belong on a
+calendar — no date, no time, just a standing note. Re-read whenever its mtime
+changes:
 
 ```json
 [
@@ -316,10 +379,6 @@ rather than letting the panel go blank.**
   "a bare string also works"
 ]
 ```
-
-`priority` 1–3 sets the colour of the left stripe. Items sort overdue-first,
-then by due date. Malformed JSON keeps the last good list rather than blanking
-the panel.
 
 ### Holidays
 

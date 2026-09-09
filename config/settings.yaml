@@ -48,26 +48,43 @@ fallback:
   scene: date
 
 sources:
-  calendar:
-    # Google Calendar -> Settings -> your calendar -> "Secret address in iCal
-    # format". Put it in .env as GLANCE_ICS_URL; it is a password, keep it out
-    # of version control.
-    ics_url: "${GLANCE_ICS_URL}"
-    refresh: 900              # seconds between calendar fetches
-    lookahead_days: 14
-  reminders:
+
+  # ---------------------------------------------------------------------
+  # One calendar per purpose. Each gets default styling here; individual
+  # entries can override it with #tags -- see "Styling entries" in the README.
+  #
+  # Google Calendar -> Settings -> <calendar> -> "Secret address in iCal
+  # format". Each is a password; keep them in .env, never in this file.
+  # ---------------------------------------------------------------------
+  calendars:
+
+    # Your day: appointments, meetings, the things with times on them.
+    agenda:
+      url: "${GLANCE_ICS_AGENDA:-}"
+      color: white
+      accent: amber
+
+    # Things to remember. Made in the same calendar app you already use, so
+    # there is no second inbox to maintain.
+    reminders:
+      url: "${GLANCE_ICS_REMINDERS:-}"
+      color: white
+      accent: sky
+
+    # Birthdays, anniversaries, the family stuff worth a look-ahead.
+    events:
+      url: "${GLANCE_ICS_EVENTS:-}"
+      color: mint
+      accent: purple
+
+  refresh: 900              # seconds between calendar fetches
+  lookahead_days: 14
+
+  # Non-time-anchored reminders, for anything that does not belong on a
+  # calendar. Optional now that reminders can come from a feed.
+  reminders_file:
     path: data/reminders.json
 
-# ---------------------------------------------------------------------------
-# Channels. Each one is a rotation served at /c/<name>.png
-#
-# Entries are tried in order. Any entry with nothing to show (no events, no
-# open todos, missing art file) drops out of the rotation automatically.
-#
-#   takeover: true   pre-empt the whole rotation while this has content
-#   when: {...}      only consider this entry inside a time window
-#   params: {...}    passed to the scene
-# ---------------------------------------------------------------------------
 channels:
 
   # ---------------------------------------------------------------------
@@ -93,25 +110,32 @@ channels:
   # What is left on the calendar today.
   today:
     - scene: today-agenda
+      params:
+        calendar: agenda
 
   # The next thing coming up, whenever it is.
   next:
     - scene: agenda
       params:
+        calendar: "agenda,events"
         count: 1
         hour24: false
         always: true
 
-  # Reminders. Rotates between the list and the single most pressing one.
+  # Reminders, from the reminders calendar. Falls back to reminders.json for
+  # anything that does not belong on a calendar.
   reminders:
+    - scene: agenda
+      params:
+        calendar: reminders
+        count: 3
+        lookahead_days: 7
+        accent: sky
+        always: true
     - scene: reminders
       params:
         count: 3
         header: true
-        always: true
-    - scene: reminders
-      params:
-        style: hero
 
   # Everything in one slot, if you would rather not use four.
   main:

@@ -64,7 +64,8 @@ class Settings:
     cache_dir: Path = PROJECT_ROOT / "data" / "cache"
     holidays_file: Path = PROJECT_ROOT / "config" / "holidays.yaml"
     todos_file: Path = PROJECT_ROOT / "data" / "reminders.json"
-    ics_url: str = ""
+    ics_url: str = ""                          # legacy single-calendar form
+    calendars: dict[str, Any] = field(default_factory=dict)
     ics_refresh: int = 900
     ics_lookahead_days: int = 14
     channels: dict[str, list[ChannelEntry]] = field(default_factory=dict)
@@ -115,7 +116,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
     cal = src.get("calendar", {}) or {}
     # "reminders" is the name in the config; "todos" is kept working so an
     # existing settings.yaml does not break.
-    todos = src.get("reminders", src.get("todos", {})) or {}
+    todos = src.get("reminders_file", src.get("reminders", src.get("todos", {}))) or {}
     paths = raw.get("paths", {}) or {}
 
     s = Settings(
@@ -129,8 +130,9 @@ def load_settings(path: str | Path | None = None) -> Settings:
         carousel_dwell=int(car.get("dwell", 300)),
         carousel_min_advance=float(car.get("min_advance_interval", 30)),
         ics_url=str(cal.get("ics_url", "") or ""),
-        ics_refresh=int(cal.get("refresh", 900)),
-        ics_lookahead_days=int(cal.get("lookahead_days", 14)),
+        ics_refresh=int(src.get("refresh", cal.get("refresh", 900))),
+        calendars=dict(src.get("calendars", {}) or {}),
+        ics_lookahead_days=int(src.get("lookahead_days", cal.get("lookahead_days", 14))),
         raw=raw,
     )
 
@@ -149,6 +151,11 @@ def load_settings(path: str | Path | None = None) -> Settings:
         name: [_parse_entry(i) for i in (entries or [])]
         for name, entries in (raw.get("channels", {}) or {}).items()
     }
+    # A single `sources.calendar.ics_url` still works; it becomes a calendar
+    # named "default" so everything downstream sees one shape.
+    if s.ics_url and "default" not in s.calendars:
+        s.calendars["default"] = {"url": s.ics_url, "refresh": s.ics_refresh}
+
     if s.carousel_mode not in ("advance", "clock"):
         raise ValueError(f"carousel.mode must be 'advance' or 'clock', got {s.carousel_mode!r}")
     return s

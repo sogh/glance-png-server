@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -20,16 +20,21 @@ import httpx
 import icalendar
 import recurring_ical_events
 
+from .tags import Style, style_for
+
 USER_AGENT = "glance-png-server/1.0 (+https://glance-led.dev)"
 
 
 @dataclass
 class Event:
-    summary: str
+    summary: str                     # tags stripped; what actually gets drawn
     start: datetime
     end: datetime
     all_day: bool
     location: str = ""
+    raw_summary: str = ""            # exactly as typed in the calendar
+    style: Style = field(default_factory=Style)
+    calendar: str = ""               # which configured calendar it came from
 
     def starts_in(self, now: datetime) -> timedelta:
         return self.start - now
@@ -46,8 +51,12 @@ class CalendarSource:
         tz: ZoneInfo,
         refresh: int = 900,
         timeout: float = 10.0,
+        name: str = "",
+        default_style: Style | None = None,
     ) -> None:
         self.url = url
+        self.name = name
+        self.default_style = default_style or Style()
         self.tz = tz
         self.refresh = refresh
         self.timeout = timeout
@@ -131,15 +140,26 @@ class CalendarSource:
                 end, _ = self._to_local(raw_end.dt, end_of_day=all_day)
             else:
                 end = start + timedelta(days=1) if all_day else start + timedelta(hours=1)
+            raw = str(occ.get("SUMMARY", "(no title)")).strip()
+            description = str(occ.get("DESCRIPTION", "") or "")
+            clean, style = style_for(raw, description)
+            # `#hide` is how you keep something in the calendar but off the panel.
+            if style.hidden:
+                continue
             out.append(
                 Event(
-                    summary=str(occ.get("SUMMARY", "(no title)")).strip(),
+                    summary=clean or raw,
                     start=start,
                     end=end,
                     all_day=all_day,
                     location=str(occ.get("LOCATION", "") or "").strip(),
+                    raw_summary=raw,
+                    style=style,
+                    calendar=self.name,
                 )
             )
+        for e in out:
+            e.style = e.style.merged_over(self.default_style)
         return sorted(out, key=lambda e: e.start)
 
     def upcoming(self, now: datetime, lookahead_days: int = 14, include_current: bool = True) -> list[Event]:

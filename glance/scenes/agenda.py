@@ -42,10 +42,17 @@ def relative_label(dt: datetime, now: datetime) -> str:
 
 
 def _events(ctx: RenderContext, params: dict[str, Any]):
-    if ctx.calendar is None:
-        return []
     days = int(params.get("lookahead_days", ctx.settings.ics_lookahead_days))
-    events = ctx.calendar.upcoming(ctx.now, lookahead_days=days)
+    # `calendar: reminders` or `calendar: "agenda,events"` selects feeds;
+    # omitting it merges them all.
+    if ctx.calendars:
+        events = ctx.calendars.upcoming(
+            ctx.now, names=params.get("calendar"), lookahead_days=days
+        )
+    elif ctx.calendar is not None:
+        events = ctx.calendar.upcoming(ctx.now, lookahead_days=days)
+    else:
+        return []
     # `today: true` turns this from "what is next" into "what is left today",
     # which is a different and equally useful panel.
     if params.get("today"):
@@ -88,6 +95,7 @@ def _render_hero(c: Canvas, ctx: RenderContext, ev, hour24: bool, accent: str,
     # in the morning once the meridiem is dropped. All-day entries always get
     # the ALL DAY chip.
     happening = ev.is_now(ctx.now) and not ev.all_day
+    accent = ev.style.color or accent          # a #tag on the entry wins
     chip = "forest" if happening else accent
     c.fill_rect(0, 0, CHIP_WIDTH, c.height, dim(chip, 0.16))
     c.vline(CHIP_WIDTH, 0, c.height, dim(chip, 0.5))
@@ -156,12 +164,13 @@ def _render_list(c: Canvas, ctx: RenderContext, events, hour24: bool, accent: st
             digits, meridiem = fmt_time(ev.start, hour24)
             label = digits if hour24 else f"{digits}{meridiem[0].lower()}"
 
-        color = "green" if ev.is_now(ctx.now) else accent
+        color = "green" if ev.is_now(ctx.now) else (ev.style.color or accent)
         c.text(1, y, label, color, "5x7", max_width=time_col - 3)
 
         badge = "" if ev.start.date() == ctx.today else day_label(ev.start, ctx.now)
         badge_w = small.measure(badge) + 4 if badge else 0
-        c.text(time_col, y, ev.summary, "white", "5x7",
+        title_color = dim("white", 0.55) if ev.style.dim else "white"
+        c.text(time_col, y, ev.summary, title_color, "5x7",
                max_width=c.width - time_col - 2 - badge_w)
         if badge:
             c.text(c.width - 1, y + 1, badge, dim(accent, 0.65), small, "right")
