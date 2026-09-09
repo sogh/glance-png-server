@@ -181,6 +181,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `todos` | Same scene, older name | anything is undone |
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
 | `date` | Day and date, no clock | always |
+| `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
 | `marquee` | Scrolling text, as an animated PNG | always |
@@ -197,6 +198,46 @@ Any scene can be pinned directly for testing, with params as query string:
 ```
 
 ---
+
+## How wide is your Scroll?
+
+A Glance is built from **64x32 LED modules chained together**, and they show
+**one continuous image** — a 192px display is three modules cooperating, not
+three separate screens. That is a different thing from private-app slots,
+which really are separate pages the device cycles between.
+
+| | What it is | How many |
+|---|---|---|
+| **Panel / module** | physical 64x32 LED block | 1–6 (up to 384px) |
+| **Private app slot** | a page of content | up to 10 |
+
+So "3 panels" describes the hardware you own, and the width every image has to
+be drawn at. Getting it wrong means the panel crops or squashes everything.
+
+To check, point a slot at the test card:
+
+```
+/s/panels.png
+```
+
+It draws each 64px module with its own colour, number and pixel range, plus a
+white dot in all four extreme corners. On the real display:
+
+- **count the numbered blocks** — that is your module count
+- **all four corner dots visible** — the width is right and it is 1:1
+- **corners missing or text squashed** — the image is not the panel's width
+
+`?width=` overrides the configured width for a single request, so you can try
+each without editing anything:
+
+```
+/s/panels.png?width=64      one module
+/s/panels.png?width=128     two
+/s/panels.png?width=192     three
+```
+
+Whichever lands cleanly, set as `panel.width` in `config/settings.yaml`. The
+private app's own "image width" field should match it.
 
 ## Your own artwork
 

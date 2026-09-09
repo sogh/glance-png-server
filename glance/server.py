@@ -47,7 +47,7 @@ def _params(request: Request, drop: set[str]) -> dict[str, Any]:
     return {k: _coerce(v) for k, v in request.query_params.items() if k not in drop}
 
 
-RESERVED_QUERY = {"peek", "k", "_"}
+RESERVED_QUERY = {"peek", "k", "_", "width"}
 
 # Scenes that need an argument to show anything on the preview page. Without
 # these, `text` and `marquee` render their own "(no text)" placeholder, which
@@ -140,7 +140,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
         # ?peek=1 renders without consuming a rotation slot -- used by the
         # preview page so opening it in a browser does not skip scenes.
         peek = request.query_params.get("peek") in ("1", "true", "yes")
-        canvas, selection, label = glance.render_channel(name, advance=not peek)
+        width = request.query_params.get("width")
+        canvas, selection, label = glance.render_channel(
+            name, advance=not peek, width=int(width) if width else None
+        )
         extra = {"X-Glance-Channel": name}
         if selection is not None:
             extra["X-Glance-Position"] = f"{selection.position + 1}/{selection.total}"
@@ -152,7 +155,10 @@ def create_app(config_path: str | None = None) -> FastAPI:
     def scene_png(ref: str, request: Request) -> Response:
         require_token(request)
         name = ref[:-4] if ref.endswith(".png") else ref
-        canvas, label = glance.render_scene(name, _params(request, RESERVED_QUERY))
+        width = request.query_params.get("width")
+        canvas, label = glance.render_scene(
+            name, _params(request, RESERVED_QUERY), width=int(width) if width else None
+        )
         return _png_response(glance.png(canvas), label)
 
     # --- preview ------------------------------------------------------------

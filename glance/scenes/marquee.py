@@ -24,7 +24,7 @@ def render_marquee(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canva
         return c
 
     return marquee_frames(
-        width=ctx.settings.width,
+        width=ctx.width,
         text=text,
         color=params.get("color", "amber"),
         font=str(params.get("font", "5x7")),

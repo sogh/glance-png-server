@@ -144,3 +144,41 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     else:
         c.centered(tail, dim(color, 0.8), "3x5", y=26)
     return c
+
+
+@register("panels", description="Test card: shows the physical 64px modules")
+def render_panels(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
+    """A test card for working out what your hardware actually is.
+
+    A Glance is built from 64x32 LED modules chained together, so a 192px
+    display is three of them showing one continuous image -- not three
+    separate screens. This draws each module's boundary and number, plus
+    markers in the extreme corners.
+
+    Read it like this:
+      - count the numbered blocks -> that is your module count
+      - all four corner markers visible -> the width is right
+      - corners missing, or text squashed -> the panel is not this wide
+    """
+    c = ctx.canvas()
+    c.clear("black")
+    module = int(params.get("module", 64))
+    colors = ["red", "green", "sky", "amber", "magenta", "mint"]
+
+    count = max(1, -(-c.width // module))
+    for i in range(count):
+        x0 = i * module
+        w = min(module, c.width - x0)
+        color = colors[i % len(colors)]
+        c.rect(x0, 0, w, c.height, color)
+        # Module number, as large as it will go.
+        c.text(x0 + w // 2, 8, str(i + 1), color, "5x7", "center", w - 6, scale=2)
+        c.text(x0 + w // 2, 24, f"{x0}-{x0 + w - 1}", dim(color, 0.8), "3x5",
+               "center", w - 4)
+
+    # Corner pixels: if any is dark on the real panel, the image is being
+    # cropped or scaled rather than shown 1:1.
+    for x in (0, c.width - 1):
+        for y in (0, c.height - 1):
+            c.pixel(x, y, "hotwhite")
+    return c

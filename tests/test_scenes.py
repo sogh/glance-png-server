@@ -244,3 +244,27 @@ def test_date_scene_has_no_time_on_it(app, now):
     a, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 9, 0, tzinfo=TZ)))
     b, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 21, 45, tzinfo=TZ)))
     assert a.to_ascii() == b.to_ascii(), "same day should render identically at any hour"
+
+
+@pytest.mark.parametrize("width,modules", [(64, 1), (128, 2), (192, 3), (384, 6)])
+def test_panel_test_card_matches_the_hardware_layout(app, now, width, modules):
+    canvas, label = app.render_scene("panels", {}, app.context(now, width=width))
+    assert canvas.width == width
+    assert not label.startswith("error:")
+    # A white pixel in each extreme corner is how you tell 1:1 from scaled.
+    for x in (0, width - 1):
+        for y in (0, 31):
+            assert sum(canvas.image.getpixel((x, y))) > 600, f"corner {x},{y} unlit"
+
+
+def test_width_override_does_not_disturb_the_configured_width(app, now):
+    app.render_scene("panels", {}, app.context(now, width=64))
+    assert app.settings.width == 192
+    normal, _ = app.render_scene("date", {}, app.context(now))
+    assert normal.width == 192
+
+
+def test_scenes_honour_the_width_override(app, now):
+    for scene in ("date", "panels", "text"):
+        c, _ = app.render_scene(scene, {"text": "HI"}, app.context(now, width=128))
+        assert c.width == 128, scene

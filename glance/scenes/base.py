@@ -30,9 +30,19 @@ class RenderContext:
     calendars: CalendarSet | None = None
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
+    width_override: int | None = None
+
+    @property
+    def width(self) -> int:
+        """Panel width for this render.
+
+        Normally the configured width, but overridable per request so you can
+        check what your hardware actually is without editing config.
+        """
+        return self.width_override or self.settings.width
 
     def canvas(self) -> Canvas:
-        return Canvas(width=self.settings.width)
+        return Canvas(width=self.width)
 
     @property
     def today(self):

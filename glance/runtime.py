@@ -63,10 +63,12 @@ class GlanceApp:
 
     # --- rendering ---------------------------------------------------------
 
-    def context(self, now: datetime | None = None) -> RenderContext:
+    def context(self, now: datetime | None = None,
+                width: int | None = None) -> RenderContext:
         return RenderContext(
             settings=self.settings,
             now=now or datetime.now(self.settings.tz),
+            width_override=width,
             calendar=self.calendar,
             calendars=self.calendars,
             todos=self.todos,
@@ -74,13 +76,14 @@ class GlanceApp:
         )
 
     def render_scene(self, ref: str, params: dict[str, Any] | None = None,
-                     ctx: RenderContext | None = None) -> tuple[Canvas | Frames, str]:
+                     ctx: RenderContext | None = None,
+                     width: int | None = None) -> tuple[Canvas | Frames, str]:
         """Render one scene by reference. Returns (canvas, label).
 
         Failures are drawn, not raised: the device caches the last image it
         fetched, so a 500 looks exactly like a working panel.
         """
-        ctx = ctx or self.context()
+        ctx = ctx or self.context(width=width)
         scene, merged = resolve(ref, params)
         if scene is None:
             return error_canvas(ctx, f"unknown scene {ref}", "404"), f"missing:{ref}"
@@ -91,8 +94,9 @@ class GlanceApp:
             return error_canvas(ctx, f"{type(exc).__name__}: {exc}", ref[:12].upper()), f"error:{ref}"
 
     def render_channel(self, channel: str, advance: bool = True,
-                       now: datetime | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
-        ctx = self.context(now)
+                       now: datetime | None = None,
+                       width: int | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
+        ctx = self.context(now, width=width)
         if channel not in self.settings.channels:
             known = ", ".join(self.settings.channels) or "none configured"
             return error_canvas(ctx, f"channels: {known}", "NO CHANNEL"), None, "unknown-channel"
