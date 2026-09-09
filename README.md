@@ -124,6 +124,7 @@ Rotation state persists to `data/state.json`, so a restart doesn't reset it.
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
+| `marquee` | Scrolling text, as an animated PNG | always |
 | `text` | Fixed text from config | always |
 | `blank` | A deliberately dark panel | always |
 
@@ -165,6 +166,66 @@ icon and large text look great."*
 - **Saturated primaries read best** at a glance from across a room.
 
 ---
+
+## Animation (worth a try)
+
+The device caches each image and redraws it until its next fetch, with a 60s
+floor on the refresh interval — so animating by fetching new frames is out.
+
+But **an APNG is a valid PNG**. `acTL`, `fcTL` and `fdAT` are ancillary
+chunks, and frame 0 sits in an ordinary `IDAT`. A decoder that understands
+them animates; a decoder that does not renders frame 0 and never knows the
+difference. The docs say PNG and say nothing about APNG, and small embedded
+decoders usually ignore animation chunks — so this probably shows a still.
+Trying costs nothing, and the answer is worth having.
+
+```
+/s/marquee.png?text=MERRY+CHRISTMAS&color=green&scale=2
+```
+
+Point a private app at that and see what the panel does. A typical marquee is
+around 30 KB of the 1 MB budget.
+
+Any scene can do this — return a `Frames` instead of a `Canvas`:
+
+```python
+from ..animation import Frames
+
+@register("blink")
+def render_blink(ctx, params) -> Frames:
+    on, off = ctx.canvas(), ctx.canvas()
+    on.centered("ALERT", "red", "5x7", scale=2)
+    return Frames(canvases=[on, off], duration=400)
+```
+
+`Frames` with a single canvas encodes as a plain PNG, so there is no cost to
+using it everywhere.
+
+**If the panel does animate**, tell me and it is worth revisiting — the same
+mechanism would give animated holiday cards and a genuinely scrolling agenda.
+
+## A note on stale clocks
+
+If you have seen Glance's own clock app sit hours behind, that is the
+signature of **server-side render caching**: community apps run on Glance's
+infrastructure with a default 300s TTL keyed on `(url, params, headers)`, and
+a clock is precisely the thing that breaks under it.
+
+This server renders on every fetch and sends `no-store`, so it cannot go hours
+out. It still cannot beat the device's own cache, though: an image fetched at
+14:00 with a 300s refresh is still on the panel at 14:04.
+
+The `clock` scene takes a `lead` for exactly this — shift the rendered time
+forward by half your refresh interval so the error is centred rather than
+always behind:
+
+```yaml
+- scene: clock
+  params:
+    lead: 150        # with refresh: 300
+```
+
+At worst 2.5 minutes out in either direction, instead of up to 5 minutes slow.
 
 ## Data sources
 

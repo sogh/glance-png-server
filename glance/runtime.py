@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .animation import Frames
 from .canvas import Canvas
 from .carousel import Carousel, Selection
 from .config import Settings, load_settings
@@ -75,7 +76,7 @@ class GlanceApp:
         )
 
     def render_scene(self, ref: str, params: dict[str, Any] | None = None,
-                     ctx: RenderContext | None = None) -> tuple[Canvas, str]:
+                     ctx: RenderContext | None = None) -> tuple[Canvas | Frames, str]:
         """Render one scene by reference. Returns (canvas, label).
 
         Failures are drawn, not raised: the device caches the last image it
@@ -92,7 +93,7 @@ class GlanceApp:
             return error_canvas(ctx, f"{type(exc).__name__}: {exc}", ref[:12].upper()), f"error:{ref}"
 
     def render_channel(self, channel: str, advance: bool = True,
-                       now: datetime | None = None) -> tuple[Canvas, Selection | None, str]:
+                       now: datetime | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
         ctx = self.context(now)
         if channel not in self.settings.channels:
             known = ", ".join(self.settings.channels) or "none configured"
@@ -115,7 +116,9 @@ class GlanceApp:
                 f"error:{selection.key}",
             )
 
-    def png(self, canvas: Canvas) -> bytes:
+    def png(self, canvas: Canvas | Frames) -> bytes:
+        # Canvas and Frames both expose to_png(); Frames returns APNG bytes
+        # when it holds more than one frame.
         return canvas.to_png(quantize=self.settings.quantize_png)
 
     # --- introspection -----------------------------------------------------

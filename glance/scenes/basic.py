@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from ..canvas import Canvas
@@ -18,11 +18,18 @@ def render_clock(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     hour24 = bool(params.get("hour24", False))
     color = params.get("color", "white")
 
+    # The device caches this image and redraws it until its next refresh, so a
+    # clock rendered at fetch time is correct once and then drifts behind for
+    # the rest of the interval. Setting `lead` to half the refresh interval
+    # centres the error instead: with refresh=300, lead=150 means the panel is
+    # at worst 2.5 minutes out either way rather than up to 5 minutes slow.
+    now = ctx.now + timedelta(seconds=int(params.get("lead", 0)))
+
     if hour24:
-        stamp, meridiem = ctx.now.strftime("%H:%M"), ""
+        stamp, meridiem = now.strftime("%H:%M"), ""
     else:
-        stamp = f"{ctx.now.hour % 12 or 12}:{ctx.now.minute:02d}"
-        meridiem = "AM" if ctx.now.hour < 12 else "PM"
+        stamp = f"{now.hour % 12 or 12}:{now.minute:02d}"
+        meridiem = "AM" if now.hour < 12 else "PM"
 
     show_date = bool(params.get("date", True))
     top = 4 if show_date else 9
@@ -41,7 +48,7 @@ def render_clock(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         c.text(x + time_w + gap, top + mono.height * 2 - small.height,
                meridiem, dim(color, 0.7), small)
     if show_date:
-        line = ctx.now.strftime("%a %d %b").upper().replace(" 0", " ")
+        line = now.strftime("%a %d %b").upper().replace(" 0", " ")
         c.centered(line, dim(params.get("accent", "sky"), 0.9), "3x5", y=23)
     return c
 
