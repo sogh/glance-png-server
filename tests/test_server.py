@@ -238,3 +238,25 @@ def test_the_token_is_not_leaked_into_scene_params(tokened_client):
     b = tokened_client.get(f"/s/text.png?text=HELLO&k={TOKEN}&_=123")
     assert a.status_code == 200
     assert a.content == b.content, "cache-buster and token must not change the render"
+
+
+def test_preview_shows_scenes_with_useful_demo_arguments(client):
+    """Without arguments, `text` and `marquee` render their own placeholder,
+    which tells you nothing about how they look."""
+    html = client.get("/preview").text
+    assert "/s/text.png?text=" in html
+    assert "/s/marquee.png?text=" in html
+    assert "/s/countdown.png?date=" in html
+
+
+def test_preview_has_an_animation_strip(client):
+    html = client.get("/preview").text
+    assert "APNG" in html
+    assert html.count("/s/marquee.png?") >= 3
+
+
+def test_preview_animations_are_really_animated(client):
+    r = client.get("/s/marquee.png?text=SCROLLING&color=amber")
+    assert r.status_code == 200
+    assert r.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert b"acTL" in r.content[:200], "should carry the animation control chunk"
