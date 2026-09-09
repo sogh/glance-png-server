@@ -46,7 +46,8 @@ def due_badge(todo, today: date) -> tuple[str, str]:
     return "", "white"
 
 
-@register("todos", available=_available, description="Open items from todos.json")
+@register("reminders", available=_available, description="Open reminders")
+@register("todos", available=_available, description="Open items from the reminders file")
 def render_todos(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     items = _open(ctx, params)
     c = ctx.canvas()
@@ -68,7 +69,7 @@ def _render_list(c: Canvas, ctx: RenderContext, items, params: dict[str, Any]) -
 
     top = 0
     if show_header:
-        c.text(2, 0, str(params.get("title", "TODO")), dim(accent, 0.9), small)
+        c.text(2, 0, str(params.get("title", "REMINDERS")), dim(accent, 0.9), small)
         c.text(c.width - 2, 0, str(len(items)), dim(accent, 0.6), small, "right")
         c.hline(0, 6, c.width, dim(accent, 0.25))
         top = 9

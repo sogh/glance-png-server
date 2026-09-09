@@ -63,7 +63,7 @@ class Settings:
     static_dir: Path = PROJECT_ROOT / "assets" / "static"
     cache_dir: Path = PROJECT_ROOT / "data" / "cache"
     holidays_file: Path = PROJECT_ROOT / "config" / "holidays.yaml"
-    todos_file: Path = PROJECT_ROOT / "data" / "todos.json"
+    todos_file: Path = PROJECT_ROOT / "data" / "reminders.json"
     ics_url: str = ""
     ics_refresh: int = 900
     ics_lookahead_days: int = 14
@@ -113,7 +113,9 @@ def load_settings(path: str | Path | None = None) -> Settings:
     car = raw.get("carousel", {}) or {}
     src = raw.get("sources", {}) or {}
     cal = src.get("calendar", {}) or {}
-    todos = src.get("todos", {}) or {}
+    # "reminders" is the name in the config; "todos" is kept working so an
+    # existing settings.yaml does not break.
+    todos = src.get("reminders", src.get("todos", {})) or {}
     paths = raw.get("paths", {}) or {}
 
     s = Settings(

@@ -206,3 +206,41 @@ def test_always_keeps_an_empty_agenda_in_the_rotation(app, now):
     assert REGISTRY["agenda"].available(ctx, {"always": True})
     canvas, label = app.render_scene("agenda", {"always": True}, ctx)
     assert not label.startswith("error:") and lit(canvas) > 0
+
+
+def test_an_all_day_event_never_shows_the_now_chip(cal_app):
+    """All-day entries run from midnight, so is_now() is true all day -- but a
+    NOW chip counting down to 23:59 renders as '11:59' and reads as morning."""
+    ctx = cal_app.context(datetime(2026, 9, 10, 6, 0, tzinfo=TZ))
+    canvas, label = cal_app.render_scene("agenda", {}, ctx)
+    assert not label.startswith("error:")
+    art = canvas.to_ascii()
+    greens = [p for p in pixels(canvas) if p[1] > 120 and p[0] < 90]
+    assert not greens, "all-day should use the amber ALL DAY chip, not green NOW"
+
+
+def test_an_in_progress_timed_event_keeps_its_meridiem(cal_app):
+    ctx = cal_app.context(datetime(2026, 9, 8, 9, 35, tzinfo=TZ))
+    canvas, _ = cal_app.render_scene("agenda", {"hour24": False}, ctx)
+    greens = [p for p in pixels(canvas) if p[1] > 120 and p[0] < 90]
+    assert greens, "a timed event in progress should still read green"
+
+
+def test_today_agenda_only_shows_today(cal_app):
+    ctx = cal_app.context(datetime(2026, 9, 8, 8, 0, tzinfo=TZ))
+    today, _ = cal_app.render_scene("today-agenda", {}, ctx)
+    upcoming, _ = cal_app.render_scene("agenda", {"count": 3}, ctx)
+    assert today.to_ascii() != upcoming.to_ascii()
+
+
+def test_today_agenda_says_so_when_the_day_is_clear(cal_app):
+    ctx = cal_app.context(datetime(2026, 9, 12, 8, 0, tzinfo=TZ))   # a Saturday
+    canvas, label = cal_app.render_scene("today-agenda", {}, ctx)
+    assert not label.startswith("error:") and lit(canvas) > 0
+
+
+def test_date_scene_has_no_time_on_it(app, now):
+    """The whole point of preferring it to a clock."""
+    a, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 9, 0, tzinfo=TZ)))
+    b, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 21, 45, tzinfo=TZ)))
+    assert a.to_ascii() == b.to_ascii(), "same day should render identically at any hour"

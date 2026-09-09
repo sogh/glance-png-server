@@ -53,6 +53,35 @@ def render_clock(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
+@register("date", description="Day and date, no clock")
+def render_date(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
+    """The date on its own.
+
+    A clock on a panel that refreshes once a minute is a liability; a date is
+    correct all day and needs no such apology.
+    """
+    c = ctx.canvas()
+    c.clear(params.get("background", "black"))
+    accent = params.get("accent", "sky")
+
+    weekday = ctx.now.strftime("%A").upper()
+    day = str(ctx.now.day)
+    month = ctx.now.strftime("%B").upper()
+    line2 = f"{day} {month}"
+    if params.get("year", True):
+        line2 += f" {ctx.now.year}"
+
+    font = get_font("5x7")
+    scale = 2 if font.measure(weekday) * 2 <= c.width - 8 else 1
+    c.centered(weekday, params.get("color", "white"), font,
+               y=4 if scale == 2 else 8, max_width=c.width - 6, scale=scale)
+    c.centered(line2, dim(accent, 0.95), "3x5", y=21, max_width=c.width - 6)
+
+    if params.get("rule", True):
+        c.hline(0, 31, c.width, dim(accent, 0.3))
+    return c
+
+
 @register("text", description="Fixed text from the channel config")
 def render_text(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()

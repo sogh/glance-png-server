@@ -175,6 +175,41 @@ FONT_5X7_GLYPHS["…"] = "...../...../...../...../...../...../#.#.#"
 FONT_3X5_GLYPHS["…"] = ".../.../.../.../#.#"
 
 
+# Real calendars are full of typographic punctuation -- Google Calendar turns
+# a typed apostrophe into U+2019 -- and none of it exists in a 5x7 ASCII font.
+# Mapping it down beats rendering "It?s probably that time".
+TRANSLITERATE = {
+    "\u2018": "'", "\u2019": "'", "\u201a": ",", "\u201b": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"',
+    "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-", "\u2212": "-",
+    "\u00a0": " ", "\u2007": " ", "\u202f": " ", "\u200b": "",
+    "\u2022": "*", "\u00b7": ".", "\u2192": ">", "\u2190": "<",
+    "\u00d7": "x", "\u00f7": "/", "\u00b0": "*", "\u20ac": "E",
+    "\u00a3": "L", "\u2122": "tm", "\u00ae": "(R)", "\u00a9": "(C)",
+}
+
+
+def to_ascii(text: str) -> str:
+    """Fold text onto what a 5x7 ASCII font can actually draw.
+
+    Known punctuation is mapped explicitly; accented letters are stripped to
+    their base form (so "Renée" draws as "Renee" rather than "Ren??").
+    """
+    import unicodedata
+
+    out = []
+    for ch in text:
+        if ch in TRANSLITERATE:
+            out.append(TRANSLITERATE[ch])
+        elif ord(ch) < 128:
+            out.append(ch)
+        else:
+            folded = unicodedata.normalize("NFKD", ch)
+            stripped = "".join(c for c in folded if not unicodedata.combining(c))
+            out.append(stripped if stripped.isascii() else ch)
+    return "".join(out)
+
+
 @dataclass(frozen=True)
 class Glyph:
     """One character, already trimmed to its inked columns."""
@@ -240,12 +275,14 @@ class BitmapFont:
 
     def measure(self, text: str) -> int:
         """Width in pixels, excluding the trailing tracking gap."""
+        text = to_ascii(text)
         if not text:
             return 0
         return sum(self.advance(c) for c in text) - self.tracking
 
     def mask(self, text: str) -> Image.Image:
         """A 1-bit mask of the text, sized exactly to the inked extent."""
+        text = to_ascii(text)
         width = max(self.measure(text), 1)
         img = Image.new("1", (width, self.height), 0)
         if not text:
@@ -263,6 +300,7 @@ class BitmapFont:
 
     def truncate(self, text: str, max_width: int, marker: str = "…") -> str:
         """Shorten text to fit, appending an ellipsis when anything is dropped."""
+        text = to_ascii(text)
         if self.measure(text) <= max_width:
             return text
         marker_w = self.measure(marker)
@@ -283,7 +321,7 @@ class BitmapFont:
         """Greedy word wrap; words longer than a line are hard-split."""
         lines: list[str] = []
         current = ""
-        for word in text.split():
+        for word in to_ascii(text).split():
             candidate = f"{current} {word}" if current else word
             if self.measure(candidate) <= max_width:
                 current = candidate

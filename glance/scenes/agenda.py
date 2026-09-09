@@ -45,7 +45,12 @@ def _events(ctx: RenderContext, params: dict[str, Any]):
     if ctx.calendar is None:
         return []
     days = int(params.get("lookahead_days", ctx.settings.ics_lookahead_days))
-    return ctx.calendar.upcoming(ctx.now, lookahead_days=days)
+    events = ctx.calendar.upcoming(ctx.now, lookahead_days=days)
+    # `today: true` turns this from "what is next" into "what is left today",
+    # which is a different and equally useful panel.
+    if params.get("today"):
+        events = [e for e in events if e.start.date() == ctx.today]
+    return events
 
 
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
@@ -66,7 +71,8 @@ def render_agenda(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear("black")
     if not events:
-        c.centered("nothing scheduled", "dim", "3x5")
+        c.centered(str(params.get("empty", "nothing today" if params.get("today")
+                                  else "nothing scheduled")), "dim", "3x5")
         return c
 
     if count > 1:
@@ -77,16 +83,22 @@ def render_agenda(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 def _render_hero(c: Canvas, ctx: RenderContext, ev, hour24: bool, accent: str,
                  params: dict[str, Any]) -> Canvas:
     """One event: a time chip on the left, title filling the rest of the strip."""
-    happening = ev.is_now(ctx.now)
+    # An all-day event is technically "in progress" from midnight, but a NOW
+    # chip counting down to 23:59 is worse than useless -- it reads as 11:59
+    # in the morning once the meridiem is dropped. All-day entries always get
+    # the ALL DAY chip.
+    happening = ev.is_now(ctx.now) and not ev.all_day
     chip = "forest" if happening else accent
     c.fill_rect(0, 0, CHIP_WIDTH, c.height, dim(chip, 0.16))
     c.vline(CHIP_WIDTH, 0, c.height, dim(chip, 0.5))
     mid = CHIP_WIDTH // 2
 
     if happening:
+        end_digits, end_mer = fmt_time(ev.end, hour24)
+        # Keep a compact meridiem: "TIL 3:00" is ambiguous, "TIL 3:00P" is not.
+        until = f"TIL {end_digits}" + (end_mer[0] if end_mer else "")
         c.text(mid, 7, "NOW", "green", "5x7", "center", CHIP_WIDTH - 2)
-        c.text(mid, 18, f"TIL {fmt_time(ev.end, hour24)[0]}", dim("green", 0.8), "3x5",
-               "center", CHIP_WIDTH - 2)
+        c.text(mid, 18, until, dim("green", 0.8), "3x5", "center", CHIP_WIDTH - 2)
     elif ev.all_day:
         c.text(mid, 8, "ALL", accent, "5x7", "center", CHIP_WIDTH - 2)
         c.text(mid, 17, "DAY", accent, "5x7", "center", CHIP_WIDTH - 2)
@@ -154,3 +166,16 @@ def _render_list(c: Canvas, ctx: RenderContext, events, hour24: bool, accent: st
         if badge:
             c.text(c.width - 1, y + 1, badge, dim(accent, 0.65), small, "right")
     return c
+
+
+def _today_defaults(params: dict[str, Any]) -> dict[str, Any]:
+    """`today-agenda` is `agenda` with today-only defaults, still overridable."""
+    merged = {"today": True, "count": 3, "always": True}
+    merged.update(params)
+    return merged
+
+
+@register("today-agenda", available=lambda c, p: _available(c, _today_defaults(p)),
+          description="What is left on today's calendar")
+def render_today(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
+    return render_agenda(ctx, _today_defaults(params))

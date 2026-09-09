@@ -103,6 +103,14 @@ Each fetch advances to the next entry. Three rules make it behave:
 
 Rotation state persists to `data/state.json`, so a restart doesn't reset it.
 
+### Why there's no clock in the default channels
+
+The device redraws a cached image until its next fetch, so a clock is wrong
+for most of the time it is on screen — which is exactly the failure you see in
+Glance's own clock app, only milder. The shipped channels use `date` instead:
+correct all day, no apology needed. `clock` is still there with a `lead`
+parameter if you want it.
+
 ### Two layers of cycling
 
 The device and this server both rotate, at very different speeds, and they
@@ -168,8 +176,11 @@ and the second steps aside. Supported by `todos` and `agenda`.
 |---|---|---|
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
-| `todos` | Open items from `todos.json` | anything is undone |
+| `today-agenda` | What's left on today's calendar | (always; says "nothing today") |
+| `reminders` | Open items from `reminders.json` | anything is undone |
+| `todos` | Same scene, older name | anything is undone |
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
+| `date` | Day and date, no clock | always |
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
 | `marquee` | Scrolling text, as an animated PNG | always |
