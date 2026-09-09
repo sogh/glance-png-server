@@ -103,6 +103,54 @@ Each fetch advances to the next entry. Three rules make it behave:
 
 Rotation state persists to `data/state.json`, so a restart doesn't reset it.
 
+### Two layers of cycling
+
+The device and this server both rotate, at very different speeds, and they
+compose rather than compete:
+
+| | What rotates | How fast | Controlled by |
+|---|---|---|---|
+| **Device** | between private-app slots | seconds | the Glance |
+| **Server** | within one channel | one refresh, 60s+ | this config |
+
+So one private app slot pointed at one channel gives you smart, conditional
+content that changes slowly. Several slots, each pointed at a **different**
+channel, give you the visible scrolling effect *and* the logic:
+
+```
+slot 1 -> http://your-host:8080/c/next.png     what is coming up
+slot 2 -> http://your-host:8080/c/tasks.png    what needs doing
+slot 3 -> http://your-host:8080/c/art.png      your own PNGs
+slot 4 -> http://your-host:8080/c/time.png     clock
+```
+
+The device flips between those four every few seconds, while each one quietly
+rotates its own contents on every refresh. Ten slots is the device's limit.
+
+The shipped `config/settings.yaml` defines exactly these four, plus a `main`
+that does everything in one slot if you would rather keep it simple.
+
+### Empty states: `always`
+
+A scene with nothing to show drops out of its channel — that is what stops an
+empty todo list serving a blank panel. In a single-purpose slot, though,
+dropping out means the slot falls through to the channel fallback, which is
+rarely what you want: a `tasks` slot should say "all clear", not show a clock.
+
+`always: true` keeps an entry in the rotation regardless, letting the scene
+draw its own empty state:
+
+```yaml
+tasks:
+  - scene: todos
+    params: { count: 3, always: true }   # draws "all clear" when empty
+  - scene: todos
+    params: { style: hero }              # drops out when empty
+```
+
+With todos present those two alternate. With none, the first holds the slot
+and the second steps aside. Supported by `todos` and `agenda`.
+
 ### The two modes
 
 - **`advance`** (default) — steps on each real fetch. Fetches closer together

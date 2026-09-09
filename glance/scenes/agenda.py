@@ -49,6 +49,10 @@ def _events(ctx: RenderContext, params: dict[str, Any]):
 
 
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
+    # `always: true` keeps the entry in rotation with an empty calendar, so it
+    # can say "nothing scheduled" rather than dropping out of the slot.
+    if params.get("always"):
+        return True
     return bool(_events(ctx, params))
 
 

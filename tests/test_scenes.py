@@ -187,3 +187,22 @@ def test_agenda_respects_the_24_hour_setting(cal_app, now):
     a, _ = cal_app.render_scene("agenda", {"hour24": False}, ctx)
     b, _ = cal_app.render_scene("agenda", {"hour24": True}, ctx)
     assert a.to_ascii() != b.to_ascii()
+
+
+def test_always_keeps_an_empty_todo_list_in_the_rotation(app, now, project):
+    """Without it the slot drops out and falls through to the channel
+    fallback; with it the scene draws its own 'all clear'."""
+    (project / "data" / "todos.json").write_text(json.dumps([{"text": "x", "done": True}]))
+    ctx = app.context(now)
+    assert not REGISTRY["todos"].available(ctx, {})
+    assert REGISTRY["todos"].available(ctx, {"always": True})
+    canvas, label = app.render_scene("todos", {"always": True}, ctx)
+    assert not label.startswith("error:") and lit(canvas) > 0
+
+
+def test_always_keeps_an_empty_agenda_in_the_rotation(app, now):
+    ctx = app.context(now)                      # no calendar configured
+    assert not REGISTRY["agenda"].available(ctx, {})
+    assert REGISTRY["agenda"].available(ctx, {"always": True})
+    canvas, label = app.render_scene("agenda", {"always": True}, ctx)
+    assert not label.startswith("error:") and lit(canvas) > 0

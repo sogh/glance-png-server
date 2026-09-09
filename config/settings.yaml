@@ -72,32 +72,70 @@ sources:
 # ---------------------------------------------------------------------------
 channels:
 
-  main:
-    # A live holiday owns the panel outright.
+  # ---------------------------------------------------------------------
+  # One channel per private-app slot.
+  #
+  # The device cycles between slots on its own clock (seconds), which is the
+  # visible scrolling effect. Each channel then rotates its own contents on
+  # every refresh (60s+), which is where the conditional logic lives. The two
+  # layers compose: fast cycling between topics, slow rotation within one.
+  #
+  # Assign them in the GLANCE app as separate private apps:
+  #   http://glance.example.com:8080/c/next.png
+  #   http://glance.example.com:8080/c/tasks.png
+  #   http://glance.example.com:8080/c/art.png
+  #   http://glance.example.com:8080/c/time.png
+  # ---------------------------------------------------------------------
+
+  # What is coming up. A live holiday pre-empts the calendar.
+  next:
     - scene: holiday
       takeover: true
-
-    # Next thing on the calendar.
+    # `always` keeps this in the slot with an empty calendar, where it draws
+    # its own "nothing scheduled" -- without it the entry would drop out and
+    # the slot would fall through to the global fallback.
     - scene: agenda
       params:
         count: 1
         hour24: false
+        always: true
 
-    # Top three open todos.
+  # What needs doing. Rotates between the list and the single most urgent item.
+  tasks:
+    # With todos present these two alternate: the list, then the most urgent
+    # one large. With none, `always` leaves the first showing "all clear" and
+    # the second drops out.
     - scene: todos
       params:
         count: 3
         header: true
+        always: true
+    - scene: todos
+      params:
+        style: hero
 
-    # Hand-made artwork. Anything in assets/static/ works: `static:<filename>`.
+  # Your own artwork. Every PNG in assets/static/ can take a turn here; with
+  # several listed, the slot shows a different one on each refresh.
+  art:
     - scene: static:example-stripes
 
-    # Waking hours only -- no point burning a slot on a clock at 3am.
+  # Time. `lead` compensates for the device caching the image between fetches
+  # -- set it to about half your refresh interval.
+  time:
+    - scene: clock
+      params:
+        hour24: false
+        lead: 30
+
+  # A single do-everything channel, if you would rather use one slot.
+  main:
+    - scene: holiday
+      takeover: true
+    - scene: agenda
+      params: { count: 1 }
+    - scene: todos
+      params: { count: 3 }
+    - scene: static:example-stripes
     - scene: clock
       when:
         hours: { from: 7, to: 22 }
-
-  # A second slot you could point another private app at.
-  agenda-only:
-    - scene: agenda
-      params: { count: 3 }

@@ -22,6 +22,11 @@ def _open(ctx: RenderContext, params: dict[str, Any]):
 
 
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
+    # `always: true` keeps the entry in the rotation with nothing to show, so
+    # the scene can render its own "all clear" instead of the slot falling
+    # through to whatever the channel's fallback is.
+    if params.get("always"):
+        return True
     return bool(_open(ctx, params))
 
 
