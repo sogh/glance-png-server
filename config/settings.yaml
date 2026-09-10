@@ -30,6 +30,13 @@ server:
   # The device url then becomes .../c/main.png?k=<token>
   access_token: "${GLANCE_TOKEN:-}"
 
+# Where the live editor at /edit saves its changes. It never writes back to
+# this file: settings.yaml is hand-authored with comments, and round-tripping
+# it through a form would destroy them. Deleting the overlay reverts
+# everything to what is written here.
+paths:
+  overlay_file: data/overrides.json
+
 carousel:
   # advance = step to the next scene on every real fetch from the device.
   # clock   = pick purely from wall-clock time (stateless, but can skip scenes

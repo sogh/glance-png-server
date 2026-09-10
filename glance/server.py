@@ -14,7 +14,9 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel
 
+from .editor import editor_page
 from .runtime import GlanceApp
 from .scenes import REGISTRY
 from .scenes.static_image import list_static
@@ -77,6 +79,16 @@ def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) 
     return Response(content=body, media_type="image/png", headers=headers)
 
 
+class ChannelUpdate(BaseModel):
+    entries: list[dict[str, Any]]
+
+
+class CarouselUpdate(BaseModel):
+    mode: str | None = None
+    dwell: int | None = None
+    min_advance_interval: float | None = None
+
+
 def create_app(config_path: str | None = None) -> FastAPI:
     glance = GlanceApp.from_config(config_path or os.environ.get("GLANCE_CONFIG"))
     api = FastAPI(title="Glance PNG Server", version="1.0", docs_url="/api/docs")
@@ -130,6 +142,74 @@ def create_app(config_path: str | None = None) -> FastAPI:
         require_token(request)
         glance.carousel.reset(channel)
         return {"reset": channel or "all"}
+
+    # --- editing the carousel ----------------------------------------------
+
+    @api.get("/api/channels")
+    def list_channels(request: Request) -> JSONResponse:
+        require_token(request)
+        overlay = glance.read_overlay()
+        return JSONResponse({
+            "channels": sorted(glance.settings.channels),
+            "overridden": sorted(overlay.get("channels", {})),
+            "scenes": sorted(s for s in REGISTRY if s != "static"),
+            "static": [f"static:{n}" for n in list_static(glance.context())],
+            "carousel": {
+                "mode": glance.settings.carousel_mode,
+                "dwell": glance.settings.carousel_dwell,
+                "min_advance_interval": glance.settings.carousel_min_advance,
+            },
+        }, headers={"Cache-Control": NO_CACHE})
+
+    @api.get("/api/channels/{name}")
+    def get_channel(name: str, request: Request) -> JSONResponse:
+        require_token(request)
+        if name not in glance.settings.channels:
+            raise HTTPException(status_code=404, detail="no such channel")
+        overlay = glance.read_overlay()
+        return JSONResponse({
+            "name": name,
+            "entries": glance.channel_spec(name),
+            "overridden": name in overlay.get("channels", {}),
+        }, headers={"Cache-Control": NO_CACHE})
+
+    @api.put("/api/channels/{name}")
+    def put_channel(name: str, body: ChannelUpdate, request: Request) -> JSONResponse:
+        require_token(request)
+        # Validate before writing: a channel that cannot be parsed would take
+        # the panel down until someone edited JSON by hand over SSH.
+        from .config import _parse_entry
+
+        for item in body.entries:
+            try:
+                _parse_entry(item)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=400, detail=f"bad entry {item!r}: {exc}") from exc
+
+        glance.set_channel(name, body.entries)
+        glance.carousel.reset(name)      # start the edited rotation from the top
+        return JSONResponse({"saved": name, "entries": glance.channel_spec(name)})
+
+    @api.post("/api/channels/{name}/reset")
+    def reset_channel(name: str, request: Request) -> JSONResponse:
+        require_token(request)
+        glance.reset_channel(name)
+        glance.carousel.reset(name)
+        return JSONResponse({"reset": name, "entries": glance.channel_spec(name)})
+
+    @api.put("/api/carousel")
+    def put_carousel(body: CarouselUpdate, request: Request) -> JSONResponse:
+        require_token(request)
+        values = {k: v for k, v in body.model_dump().items() if v is not None}
+        if "mode" in values and values["mode"] not in ("advance", "clock"):
+            raise HTTPException(status_code=400, detail="mode must be advance or clock")
+        glance.set_carousel(values)
+        return JSONResponse({"saved": values})
+
+    @api.get("/edit", response_class=HTMLResponse)
+    def edit(request: Request) -> HTMLResponse:
+        require_token(request)
+        return HTMLResponse(editor_page(token), headers={"Cache-Control": NO_CACHE})
 
     # --- the endpoint the Glance actually points at ------------------------
 
@@ -229,6 +309,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 </style>
 <h1>Glance preview &mdash; {glance.settings.width}&times;32 at {zoom}&times;</h1>
 <p class="meta">{info['now']} &middot; carousel <code>{info['carousel']['mode']}</code>
+ &middot; <a href="{tokened('/edit')}">edit carousel</a>
  &middot; <a href="{tokened('/api/status')}">status json</a>
  &middot; <a href="{tokened(f'/preview?zoom={3 if zoom != 3 else 5}')}">toggle zoom</a></p>
 {"".join(parts) or "<p class='meta'>No channels configured.</p>"}

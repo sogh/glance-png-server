@@ -142,14 +142,13 @@ def test_static_art_hot_reloads_when_the_file_changes(app, now, project):
 def cal_app(project, ics_server):
     import yaml
 
-    from glance.config import load_settings
     from glance.runtime import GlanceApp
 
     cfg = project / "config" / "settings.yaml"
     data = yaml.safe_load(cfg.read_text())
     data["sources"]["calendar"] = {"ics_url": ics_server, "refresh": 0}
     cfg.write_text(yaml.safe_dump(data))
-    return GlanceApp(load_settings(cfg))
+    return GlanceApp.from_config(cfg)
 
 
 def test_agenda_hero_shows_the_next_event(cal_app, now):

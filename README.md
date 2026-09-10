@@ -111,6 +111,72 @@ Glance's own clock app, only milder. The shipped channels use `date` instead:
 correct all day, no apology needed. `clock` is still there with a `lead`
 parameter if you want it.
 
+## Editing the carousel live
+
+`/edit` is a page for changing what a channel shows, in what order, and how
+long each entry stays up. Changes take effect on the panel's **next fetch** —
+no restart, no redeploy.
+
+```
+http://your-host:8080/edit
+```
+
+Per entry: reorder with the arrows, toggle `enabled`, set `dwell`, mark an
+entry as `takeover`, edit its params as JSON, and see a live thumbnail of what
+it renders. Below that, the carousel's own `mode`, clock `dwell` and
+`min advance`.
+
+### It never writes to settings.yaml
+
+Everything saves to `data/overrides.json`, which the editor exclusively owns.
+`settings.yaml` is hand-authored with comments explaining why things are the
+way they are; round-tripping it through a web form destroys those and
+guarantees conflicts with the repo. Keeping edits in a separate file means:
+
+- your config stays readable and version-controlled
+- **reset to file** is just deleting a key
+- a deploy never clobbers what you changed from the UI (`data/` is excluded)
+- every override is visible in one small file you can read or delete
+
+A channel present in the overlay **replaces** that channel wholesale rather
+than merging entry by entry — the editor always sends the full list, and
+merging arrays by index is a reliable source of surprises. A corrupt overlay
+is ignored rather than taking the panel down, and a save that fails validation
+changes nothing.
+
+### `dwell` — controlling the pace
+
+This is the only way to control how fast the panel changes. **The device
+decides how often it fetches**, and the floor is 60 seconds; nothing here can
+make it ask more often. So "show this for five minutes" has to mean "keep
+returning the same thing until five minutes have passed":
+
+```yaml
+- scene: holiday
+  dwell: 300        # holiday art stays up for five minutes
+- scene: agenda
+  dwell: 60         # the next event turns over quickly
+- scene: date
+  dwell: 0          # advance on every fetch
+```
+
+`carousel.min_advance_interval` is a floor under all of it, so a double fetch
+cannot burn two slots regardless of dwell.
+
+### API
+
+The page is a thin client over these, if you would rather script it:
+
+| Route | |
+|---|---|
+| `GET /api/channels` | channel names, available scenes, carousel settings |
+| `GET /api/channels/<name>` | one channel's entries, and whether it is overridden |
+| `PUT /api/channels/<name>` | replace its entries (validated first) |
+| `POST /api/channels/<name>/reset` | drop the overlay, restore `settings.yaml` |
+| `PUT /api/carousel` | mode, dwell, min advance |
+
+All of them require the access token when one is set.
+
 ### Two layers of cycling
 
 The device and this server both rotate, at very different speeds, and they

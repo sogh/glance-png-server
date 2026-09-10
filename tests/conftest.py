@@ -65,10 +65,11 @@ def project(tmp_path: Path) -> Path:
     settings = {
         "timezone": "America/Los_Angeles",
         "panel": {"width": 192},
-        "carousel": {"mode": "advance"},
+        "carousel": {"mode": "advance", "min_advance_interval": 0},
         "sources": {"todos": {"path": str(tmp_path / "data" / "todos.json")}},
         "paths": {
             "state_file": str(tmp_path / "data" / "state.json"),
+            "overlay_file": str(tmp_path / "data" / "overrides.json"),
             "static_dir": str(tmp_path / "assets" / "static"),
             "cache_dir": str(tmp_path / "data" / "cache"),
             "holidays_file": str(tmp_path / "config" / "holidays.yaml"),
@@ -110,7 +111,7 @@ def project(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def app(project: Path) -> GlanceApp:
-    return GlanceApp(load_settings(project / "config" / "settings.yaml"))
+    return GlanceApp.from_config(project / "config" / "settings.yaml")
 
 
 TAGGED_ICS = """BEGIN:VCALENDAR

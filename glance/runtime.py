@@ -6,6 +6,7 @@ single GlanceApp so the server layer stays a thin adapter.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from datetime import datetime
@@ -15,7 +16,7 @@ from typing import Any
 from .animation import Frames
 from .canvas import Canvas
 from .carousel import Carousel, Selection
-from .config import Settings, load_settings
+from .config import ChannelEntry, Settings, load_settings
 from .scenes import REGISTRY, RenderContext, error_canvas, resolve
 from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
@@ -27,8 +28,12 @@ log = logging.getLogger("glance")
 
 
 class GlanceApp:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, config_path: Path | None = None) -> None:
         self.settings = settings
+        self.config_path = Path(config_path) if config_path else None
+        self._reload_lock = threading.Lock()
+        self._mtimes: dict[str, float | None] = {}
+        self._snapshot_mtimes()
         self.carousel = Carousel(settings)
         self.todos = TodoSource(settings.todos_file)
         self.calendars = CalendarSet(
@@ -44,7 +49,115 @@ class GlanceApp:
 
     @classmethod
     def from_config(cls, path: str | Path | None = None) -> "GlanceApp":
-        return cls(load_settings(path))
+        from .config import PROJECT_ROOT
+
+        resolved = Path(path) if path else PROJECT_ROOT / "config" / "settings.yaml"
+        return cls(load_settings(path), config_path=resolved)
+
+    # --- live config -------------------------------------------------------
+
+    def _watched(self) -> dict[str, Path]:
+        paths = {"overlay": Path(self.settings.overlay_file)}
+        if self.config_path:
+            paths["config"] = self.config_path
+        return paths
+
+    def _snapshot_mtimes(self) -> None:
+        self._mtimes = {
+            k: (p.stat().st_mtime if p.exists() else None)
+            for k, p in self._watched().items()
+        }
+
+    def reload_if_changed(self) -> bool:
+        """Re-read settings.yaml and the overlay when either has changed.
+
+        Editing the carousel should take effect on the panel's next fetch, not
+        on the next redeploy.
+        """
+        if self.config_path is None:
+            # Constructed from a Settings object with no file behind it; there
+            # is nothing to re-read, and guessing a path would silently load
+            # somebody else's config.
+            return False
+        with self._reload_lock:
+            current = {
+                k: (p.stat().st_mtime if p.exists() else None)
+                for k, p in self._watched().items()
+            }
+            if current == self._mtimes:
+                return False
+            try:
+                fresh = load_settings(self.config_path)
+            except Exception as exc:  # noqa: BLE001 - keep serving the old config
+                log.warning("config reload failed, keeping previous: %s", exc)
+                self._mtimes = current
+                return False
+
+            calendars_changed = fresh.calendars != self.settings.calendars
+            self.settings = fresh
+            self.carousel.settings = fresh
+            self.carousel.min_advance_interval = fresh.carousel_min_advance
+            self.todos.path = Path(fresh.todos_file)
+            if calendars_changed:
+                self.calendars = CalendarSet(
+                    fresh.calendars, fresh.cache_dir, fresh.tz, fresh.ics_refresh
+                )
+                first = next(iter(self.calendars.sources.values()), None)
+                self.calendar = self.calendars.get("default") or first
+            self._mtimes = current
+            log.info("config reloaded")
+            return True
+
+    # --- the overlay the editor writes -------------------------------------
+
+    def read_overlay(self) -> dict[str, Any]:
+        path = Path(self.settings.overlay_file)
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def write_overlay(self, overlay: dict[str, Any]) -> None:
+        path = Path(self.settings.overlay_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(overlay, indent=2, sort_keys=True))
+        tmp.replace(path)          # atomic: never leave a half-written overlay
+        self.reload_if_changed()
+
+    def set_channel(self, name: str, entries: list[dict[str, Any]]) -> None:
+        overlay = self.read_overlay()
+        overlay.setdefault("channels", {})[name] = entries
+        self.write_overlay(overlay)
+
+    def reset_channel(self, name: str) -> None:
+        """Forget the overlay for one channel, restoring settings.yaml."""
+        overlay = self.read_overlay()
+        overlay.get("channels", {}).pop(name, None)
+        if not overlay.get("channels"):
+            overlay.pop("channels", None)
+        self.write_overlay(overlay)
+
+    def set_carousel(self, values: dict[str, Any]) -> None:
+        overlay = self.read_overlay()
+        overlay.setdefault("carousel", {}).update(values)
+        self.write_overlay(overlay)
+
+    def channel_spec(self, name: str) -> list[dict[str, Any]]:
+        """The channel as data, ready for the editor."""
+        return [
+            {
+                "ref": e.ref,
+                "params": e.params,
+                "enabled": e.enabled,
+                "takeover": e.takeover,
+                "dwell": e.dwell,
+                "when": e.when,
+            }
+            for e in self.settings.channels.get(name, [])
+        ]
 
     # --- holidays reload on edit ------------------------------------------
 
@@ -65,6 +178,7 @@ class GlanceApp:
 
     def context(self, now: datetime | None = None,
                 width: int | None = None) -> RenderContext:
+        self.reload_if_changed()
         return RenderContext(
             settings=self.settings,
             now=now or datetime.now(self.settings.tz),

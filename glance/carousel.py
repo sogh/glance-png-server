@@ -185,10 +185,18 @@ class Carousel:
 
             if last_key not in keys:
                 index = 0                      # first run, or the last scene dried up
-            elif not advance or (now - last_at) < self.min_advance_interval:
-                index = keys.index(last_key)   # peek, or a duplicate fetch
             else:
-                index = (keys.index(last_key) + 1) % len(keys)
+                current = keys.index(last_key)
+                # How long this entry has earned. The double-fetch debounce is
+                # the floor; a per-entry `dwell` extends it, which is the only
+                # way to control pace -- the device's refresh interval is not
+                # ours to set, so "show this one for five minutes" has to mean
+                # "keep returning it until five minutes have passed".
+                hold_for = max(self.min_advance_interval, available[current].entry.dwell)
+                if not advance or (now - last_at) < hold_for:
+                    index = current
+                else:
+                    index = (current + 1) % len(keys)
 
             if advance:
                 self._state[channel] = {

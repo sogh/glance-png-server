@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -37,6 +38,7 @@ class ChannelEntry:
     takeover: bool = False                    # pre-empts rotation while available
     when: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
+    dwell: float = 0.0                        # seconds to hold before advancing
 
     @property
     def key(self) -> str:
@@ -60,6 +62,7 @@ class Settings:
     carousel_dwell: int = 300                 # seconds, clock mode only
     carousel_min_advance: float = 30.0        # debounce, advance mode only
     state_file: Path = PROJECT_ROOT / "data" / "state.json"
+    overlay_file: Path = PROJECT_ROOT / "data" / "overrides.json"
     static_dir: Path = PROJECT_ROOT / "assets" / "static"
     cache_dir: Path = PROJECT_ROOT / "data" / "cache"
     holidays_file: Path = PROJECT_ROOT / "config" / "holidays.yaml"
@@ -91,14 +94,19 @@ def _parse_entry(item: Any) -> ChannelEntry:
         ref = f"static:{data.pop('static')}"
     elif "scene" in data:
         ref = str(data.pop("scene"))
+    elif "ref" in data:
+        # The form channel_spec() emits, so the editor can round-trip a
+        # channel through the overlay without translating key names.
+        ref = str(data.pop("ref"))
     else:
-        raise ValueError(f"channel entry needs a 'scene' or 'static' key: {item!r}")
+        raise ValueError(f"channel entry needs a 'scene', 'static' or 'ref' key: {item!r}")
 
     return ChannelEntry(
         ref=ref,
         takeover=bool(data.pop("takeover", False)),
         when=data.pop("when", {}) or {},
         enabled=bool(data.pop("enabled", True)),
+        dwell=float(data.pop("dwell", 0) or 0),
         params=data.pop("params", {}) or data,  # leftover keys are scene params
     )
 
@@ -138,6 +146,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
 
     for attr, key in (
         ("state_file", "state_file"),
+        ("overlay_file", "overlay_file"),
         ("static_dir", "static_dir"),
         ("cache_dir", "cache_dir"),
         ("holidays_file", "holidays_file"),
@@ -156,6 +165,42 @@ def load_settings(path: str | Path | None = None) -> Settings:
     if s.ics_url and "default" not in s.calendars:
         s.calendars["default"] = {"url": s.ics_url, "refresh": s.ics_refresh}
 
+    apply_overlay(s)
+
     if s.carousel_mode not in ("advance", "clock"):
         raise ValueError(f"carousel.mode must be 'advance' or 'clock', got {s.carousel_mode!r}")
     return s
+
+
+def apply_overlay(s: Settings) -> None:
+    """Layer data/overrides.json on top of the parsed settings.
+
+    The editor writes only here, never back to settings.yaml. That file is
+    hand-authored with comments explaining why things are the way they are;
+    round-tripping YAML through a form destroys those and guarantees conflicts
+    with the repo. Keeping edits in a separate JSON file means the config stays
+    pristine, "reset to file" is deleting a key, and a deploy never clobbers
+    what you changed from the UI (data/ is excluded from deploys).
+
+    A channel present in the overlay REPLACES that channel wholesale rather
+    than merging entry by entry -- the editor always sends the full list, and
+    merging arrays by index is a reliable source of surprises.
+    """
+    path = Path(s.overlay_file)
+    if not path.exists():
+        return
+    try:
+        overlay = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return          # a corrupt overlay must not take the panel down
+
+    car = overlay.get("carousel", {}) or {}
+    if "mode" in car:
+        s.carousel_mode = str(car["mode"])
+    if "dwell" in car:
+        s.carousel_dwell = int(car["dwell"])
+    if "min_advance_interval" in car:
+        s.carousel_min_advance = float(car["min_advance_interval"])
+
+    for name, entries in (overlay.get("channels", {}) or {}).items():
+        s.channels[name] = [_parse_entry(i) for i in (entries or [])]
