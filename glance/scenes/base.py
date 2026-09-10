@@ -41,6 +41,13 @@ class RenderContext:
         """
         return self.width_override or self.settings.width
 
+    @property
+    def height(self) -> int:
+        """Always 32 -- Glance panels have no other height."""
+        from ..canvas import PANEL_HEIGHT
+
+        return PANEL_HEIGHT
+
     def canvas(self) -> Canvas:
         return Canvas(width=self.width)
 

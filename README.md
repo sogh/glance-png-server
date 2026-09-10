@@ -251,6 +251,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
 | `marquee` | Scrolling text, as an animated PNG | always |
+| `pulse` | Names breathing between white and a colour | always |
 | `text` | Fixed text from config | always |
 | `blank` | A deliberately dark panel | always |
 
@@ -369,6 +370,35 @@ using it everywhere.
 
 **If the panel does animate**, tell me and it is worth revisiting — the same
 mechanism would give animated holiday cards and a genuinely scrolling agenda.
+
+### `pulse` — names that breathe
+
+```
+/s/pulse.png?items=ADA:yellow,GRACE:blue
+```
+
+Each item eases from white to its own colour and back, on a raised cosine so
+there is no visible seam where the loop closes. Frame zero is the all-white
+state, so a panel that ignores APNG still shows both names perfectly legibly.
+
+```yaml
+- scene: pulse
+  params:
+    items: "ADA:yellow,GRACE:blue"
+    layout: column      # or row, side by side
+    stagger: 0.5        # offset the items so they take turns
+    floor: 0.3          # how far back toward white the dim end goes
+    frames: 30
+    duration: 70        # ms per frame
+  dwell: 300            # hold it for five minutes
+```
+
+`items` is a `NAME:colour` list so the same value works from a channel config,
+the editor's params box and a query string alike. Any palette colour or
+`#rrggbb` works.
+
+The scale is chosen to fit the panel, and an explicit `scale` that would not
+fit is **clamped rather than obeyed** — a smaller name beats half a name.
 
 ## A note on stale clocks
 
