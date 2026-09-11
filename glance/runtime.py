@@ -23,6 +23,7 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
 
 log = logging.getLogger("glance")
@@ -44,10 +45,30 @@ class GlanceApp:
         first = next(iter(self.calendars.sources.values()), None)
         self.calendar: CalendarSource | None = self.calendars.get("default") or first
         self.brightness = brightness_mod.Brightness.from_config(settings.brightness)
+        self.weather = self._build_weather(settings)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
         settings.static_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _build_weather(settings: Settings) -> WeatherSource:
+        spec = settings.weather or {}
+
+        def coord(key: str) -> float | None:
+            raw = spec.get(key)
+            try:
+                return float(raw) if raw not in (None, "") else None
+            except (TypeError, ValueError):
+                return None
+
+        return WeatherSource(
+            latitude=coord("latitude"),
+            longitude=coord("longitude"),
+            cache_dir=settings.cache_dir,
+            units=str(spec.get("units", "fahrenheit")),
+            refresh=int(spec.get("refresh", 900)),
+        )
 
     @classmethod
     def from_config(cls, path: str | Path | None = None) -> "GlanceApp":
@@ -96,8 +117,11 @@ class GlanceApp:
                 return False
 
             calendars_changed = fresh.calendars != self.settings.calendars
+            weather_changed = fresh.weather != self.settings.weather
             self.settings = fresh
             self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
+            if weather_changed:
+                self.weather = self._build_weather(fresh)
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
@@ -202,6 +226,7 @@ class GlanceApp:
             width_override=width,
             calendar=self.calendar,
             calendars=self.calendars,
+            weather=self.weather,
             todos=self.todos,
             holidays=self.holidays,
         )
@@ -293,6 +318,10 @@ class GlanceApp:
             },
             "sources": {
                 "calendars": self.calendars.status(ctx.now),
+                "weather": {
+                    "configured": self.weather.configured,
+                    "last_error": self.weather.last_error,
+                },
                 "todos": {
                     "path": str(self.settings.todos_file),
                     "last_error": self.todos.last_error,

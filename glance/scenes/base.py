@@ -17,6 +17,7 @@ from ..config import Settings
 from ..sources.holidays import Holiday
 from ..sources.calendars import CalendarSet
 from ..sources.ics import CalendarSource
+from ..sources.weather import WeatherSource
 from ..sources.todos import TodoSource
 
 
@@ -28,6 +29,7 @@ class RenderContext:
     now: datetime
     calendar: CalendarSource | None = None
     calendars: CalendarSet | None = None
+    weather: WeatherSource | None = None
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None

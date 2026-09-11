@@ -103,6 +103,14 @@ sources:
       color: mint
       accent: purple
 
+  # Weather from Open-Meteo. No API key and no account -- just coordinates.
+  # Find yours by right-clicking your house in Google Maps.
+  weather:
+    latitude: "${GLANCE_LAT:-}"
+    longitude: "${GLANCE_LON:-}"
+    units: fahrenheit         # or celsius
+    refresh: 900
+
   refresh: 900              # seconds between calendar fetches
   lookahead_days: 14
 

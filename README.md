@@ -246,6 +246,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `reminders` | Open items from `reminders.json` | anything is undone |
 | `todos` | Same scene, older name | anything is undone |
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
+| `weather` | Current conditions, high and low | coordinates are set |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -536,6 +537,34 @@ priority: 1
 Only `color`, `accent`, `style`, `priority`, `hidden` and `dim` are read, so
 an ordinary description cannot restyle an entry by accident. Title tags beat
 description keys; both beat the calendar's defaults.
+
+### Weather
+
+Open-Meteo, chosen because it needs **no API key and no account** — just
+coordinates. One call returns current conditions and today's high and low in
+under a kilobyte.
+
+```yaml
+sources:
+  weather:
+    latitude: "${GLANCE_LAT:-}"
+    longitude: "${GLANCE_LON:-}"
+    units: fahrenheit       # or celsius
+    refresh: 900
+```
+
+Right-click your house in Google Maps to get the coordinates. With none set
+the scene drops out of rotation rather than showing an empty box.
+
+The temperature is coloured by value — orange above 75, blue below 45 — so it
+reads from across a room before you have focused on the digits. Icons are
+drawn from primitives in `glance/weathericons.py` (clear, partly, cloudy, fog,
+drizzle, rain, snow, thunder, plus a crescent moon at night), because circles
+and clouds are far easier to describe as overlapping discs than to type out
+pixel by pixel.
+
+As with the calendar, a failed fetch serves the cached reading: a slightly
+stale temperature beats a blank panel.
 
 ### Reminders without a calendar
 

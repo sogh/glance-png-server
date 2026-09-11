@@ -59,6 +59,18 @@ class Canvas:
         self.fill_rect(x, y, 1, h, color)
         self.fill_rect(x + w - 1, y, 1, h, color)
 
+    def disc(self, cx: int, cy: int, r: int, color: str | RGB) -> None:
+        """A filled circle. Centres land between pixels at even diameters, so
+        the half-pixel offset keeps small discs symmetrical."""
+        fill = snap(parse(color))
+        limit = (r + 0.5) ** 2
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy <= limit:
+                    x, y = cx + dx, cy + dy
+                    if 0 <= x < self.width and 0 <= y < self.height:
+                        self.image.putpixel((x, y), fill)
+
     def hline(self, x: int, y: int, w: int, color: str | RGB) -> None:
         self.fill_rect(x, y, w, 1, color)
 
