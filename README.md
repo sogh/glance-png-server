@@ -251,7 +251,9 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
 | `marquee` | Scrolling text, as an animated PNG | always |
-| `pulse` | Names breathing between white and a colour | always |
+| `pulse` | Names with a colour ramp across the letters | always |
+| `sprite` | Text with a pixel-art sprite set into it | always |
+| `sprites` | Every sprite, for checking the art | always |
 | `text` | Fixed text from config | always |
 | `blank` | A deliberately dark panel | always |
 
@@ -355,6 +357,52 @@ ever changes this, the mechanism is already there.
 **What still moves:** the device cycles between private-app slots on its own
 clock, every few seconds. That is real motion, and it is what several channels
 across several slots buys you.
+
+### `sprite` — pixel art set into a line of text
+
+```
+/s/sprite.png?before=It%27s&sprite=sweatpants&after=season%21
+```
+
+Renders *It's [sweatpants] season!* — the art sits in the gap between the two
+strings.
+
+```yaml
+- scene: sprite
+  params:
+    before: "It's"
+    sprite: sweatpants
+    after: "season!"
+    color: amber          # the text; the sprite keeps its own palette
+    gap: 5
+  dwell: 300
+```
+
+Text is scaled to the largest whole size that fits beside the sprite, gaps
+tighten on a narrow panel, and if it still will not fit the strings are
+truncated in proportion rather than running off the edge. It renders correctly
+down to a single 64px module.
+
+#### Drawing a new sprite
+
+Sprites live in `glance/sprites.py` as pixel art, the same way the fonts do —
+`.` is transparent, every other character is a palette entry:
+
+```python
+MUG = Sprite(
+    rows=(
+        "..######..",
+        ".########.",
+        ".#      #.",
+    ),
+    palette={"#": "#8c8c91"},
+)
+SPRITES["mug"] = MUG
+```
+
+Tests check every sprite is a clean rectangle, that each character used has a
+palette entry, and that nothing is taller than the panel — a ragged row
+silently shifts everything below it.
 
 ### `pulse` — a colour ramp across the letters
 

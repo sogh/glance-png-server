@@ -58,6 +58,8 @@ PREVIEW_DEMO: dict[str, str] = {
     "text": "text=GOOD+MORNING&sub=IT+IS+A+FINE+DAY&color=amber",
     "marquee": "text=SCROLLING+MARQUEE+TEXT&color=amber",
     "countdown": "date=2026-12-25&label=XMAS",
+    "sprite": "before=It%27s&after=season%21",
+    "pulse": "items=ADA:yellow,GRACE:blue",
 }
 
 # Marquees shown in the animation strip, as (label, query).
