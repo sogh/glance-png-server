@@ -45,11 +45,21 @@ def _coerce(value: str) -> Any:
         return value
 
 
+def _brightness(request: Request) -> float | None:
+    raw = request.query_params.get("brightness")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except ValueError:
+        return None
+
+
 def _params(request: Request, drop: set[str]) -> dict[str, Any]:
     return {k: _coerce(v) for k, v in request.query_params.items() if k not in drop}
 
 
-RESERVED_QUERY = {"peek", "k", "_", "width"}
+RESERVED_QUERY = {"peek", "k", "_", "width", "brightness"}
 
 # Scenes that need an argument to show anything on the preview page. Without
 # these, `text` and `marquee` render their own "(no text)" placeholder, which
@@ -224,7 +234,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
         peek = request.query_params.get("peek") in ("1", "true", "yes")
         width = request.query_params.get("width")
         canvas, selection, label = glance.render_channel(
-            name, advance=not peek, width=int(width) if width else None
+            name, advance=not peek, width=int(width) if width else None,
+            brightness=_brightness(request),
         )
         extra = {"X-Glance-Channel": name}
         if selection is not None:
@@ -239,7 +250,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
         name = ref[:-4] if ref.endswith(".png") else ref
         width = request.query_params.get("width")
         canvas, label = glance.render_scene(
-            name, _params(request, RESERVED_QUERY), width=int(width) if width else None
+            name, _params(request, RESERVED_QUERY), width=int(width) if width else None,
+            brightness=_brightness(request),
         )
         return _png_response(glance.png(canvas), label)
 
@@ -250,9 +262,15 @@ def create_app(config_path: str | None = None) -> FastAPI:
         require_token(request)
         ctx = glance.context()
         zoom = int(request.query_params.get("zoom", 4))
+        # Design at full brightness unless asked otherwise: judging artwork
+        # through the evening dimming curve is misleading.
+        live = request.query_params.get("live") in ("1", "true", "yes")
+        bright_q = "" if live else "&brightness=1"
         info = glance.status()
 
         def frame(src: str, title: str, note: str = "") -> str:
+            if bright_q:
+                src += ("&" if "?" in src else "?") + "brightness=1"
             src = tokened(src)
             return (
                 f'<figure><img src="{src}" alt="{title}" '
@@ -312,6 +330,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
 <h1>Glance preview &mdash; {glance.settings.width}&times;32 at {zoom}&times;</h1>
 <p class="meta">{info['now']} &middot; carousel <code>{info['carousel']['mode']}</code>
  &middot; <a href="{tokened('/edit')}">edit carousel</a>
+ &middot; <a href="{tokened('/preview?live=1' if not live else '/preview')}">{'showing full brightness' if not live else f'showing live level {info["panel"]["brightness"]}'}</a>
  &middot; <a href="{tokened('/api/status')}">status json</a>
  &middot; <a href="{tokened(f'/preview?zoom={3 if zoom != 3 else 5}')}">toggle zoom</a></p>
 {"".join(parts) or "<p class='meta'>No channels configured.</p>"}

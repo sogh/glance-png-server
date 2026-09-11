@@ -57,6 +57,7 @@ class Settings:
     port: int = 8080
     timezone: str = "UTC"
     quantize_png: bool = True
+    brightness: Any = None                    # panel.brightness, see brightness.py
     access_token: str = ""                    # when set, image routes require it
     carousel_mode: str = "advance"            # "advance" | "clock"
     carousel_dwell: int = 300                 # seconds, clock mode only
@@ -133,6 +134,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         port=int(server.get("port", 8080)),
         timezone=str(raw.get("timezone", "UTC")),
         quantize_png=bool(panel.get("quantize_png", True)),
+        brightness=panel.get("brightness"),
         access_token=str(server.get("access_token", "") or ""),
         carousel_mode=str(car.get("mode", "advance")),
         carousel_dwell=int(car.get("dwell", 300)),

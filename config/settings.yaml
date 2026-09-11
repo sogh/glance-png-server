@@ -13,6 +13,25 @@ panel:
   width: 192
   quantize_png: true          # palette-encode the PNG; typically 300-3000 bytes
 
+  # Time-of-day dimming, applied to every finished panel. An LED matrix at
+  # full output in a dark room is unpleasant, and doing it here means no scene
+  # has to think about it.
+  #
+  # The level ramps linearly between these points and wraps through midnight,
+  # so it never visibly steps while you are looking at it. Note the 20:00
+  # point: without it the level would ramp from breakfast to bedtime and noon
+  # would come out dimmer than dawn.
+  #
+  # Set `brightness: false` to switch it off, or a plain number to pin it.
+  brightness:
+    floor: 0.05
+    schedule:
+      - { at: "06:00", level: 0.15 }   # pre-dawn
+      - { at: "07:30", level: 1.00 }   # sunrise ramp done
+      - { at: "20:00", level: 1.00 }   # hold full all day
+      - { at: "22:00", level: 0.45 }   # evening
+      - { at: "23:30", level: 0.22 }   # night
+
 server:
   host: 0.0.0.0
   port: 8080

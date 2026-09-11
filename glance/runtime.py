@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import brightness as brightness_mod
 from .animation import Frames
 from .canvas import Canvas
 from .carousel import Carousel, Selection
@@ -42,6 +43,7 @@ class GlanceApp:
         # Kept for scenes and callers that just want "the" calendar.
         first = next(iter(self.calendars.sources.values()), None)
         self.calendar: CalendarSource | None = self.calendars.get("default") or first
+        self.brightness = brightness_mod.Brightness.from_config(settings.brightness)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -95,6 +97,7 @@ class GlanceApp:
 
             calendars_changed = fresh.calendars != self.settings.calendars
             self.settings = fresh
+            self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
@@ -176,10 +179,24 @@ class GlanceApp:
 
     # --- rendering ---------------------------------------------------------
 
+    def dim(self, rendered: Canvas | Frames, ctx: RenderContext) -> Canvas | Frames:
+        """Apply the time-of-day level to a finished render.
+
+        Done here rather than in each scene so every panel is treated the
+        same, including artwork loaded from a file.
+        """
+        level = ctx.brightness if ctx.brightness is not None else \
+            self.brightness.level_at(ctx.now)
+        for canvas in getattr(rendered, "canvases", [rendered]):
+            brightness_mod.apply(canvas, level)
+        return rendered
+
     def context(self, now: datetime | None = None,
-                width: int | None = None) -> RenderContext:
+                width: int | None = None,
+                brightness: float | None = None) -> RenderContext:
         self.reload_if_changed()
         return RenderContext(
+            brightness=brightness,
             settings=self.settings,
             now=now or datetime.now(self.settings.tz),
             width_override=width,
@@ -191,26 +208,28 @@ class GlanceApp:
 
     def render_scene(self, ref: str, params: dict[str, Any] | None = None,
                      ctx: RenderContext | None = None,
-                     width: int | None = None) -> tuple[Canvas | Frames, str]:
+                     width: int | None = None,
+                     brightness: float | None = None) -> tuple[Canvas | Frames, str]:
         """Render one scene by reference. Returns (canvas, label).
 
         Failures are drawn, not raised: the device caches the last image it
         fetched, so a 500 looks exactly like a working panel.
         """
-        ctx = ctx or self.context(width=width)
+        ctx = ctx or self.context(width=width, brightness=brightness)
         scene, merged = resolve(ref, params)
         if scene is None:
             return error_canvas(ctx, f"unknown scene {ref}", "404"), f"missing:{ref}"
         try:
-            return scene.render(ctx, merged), ref
+            return self.dim(scene.render(ctx, merged), ctx), ref
         except Exception as exc:  # noqa: BLE001
             log.exception("scene %s failed", ref)
             return error_canvas(ctx, f"{type(exc).__name__}: {exc}", ref[:12].upper()), f"error:{ref}"
 
     def render_channel(self, channel: str, advance: bool = True,
                        now: datetime | None = None,
-                       width: int | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
-        ctx = self.context(now, width=width)
+                       width: int | None = None,
+                       brightness: float | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
+        ctx = self.context(now, width=width, brightness=brightness)
         if channel not in self.settings.channels:
             known = ", ".join(self.settings.channels) or "none configured"
             return error_canvas(ctx, f"channels: {known}", "NO CHANNEL"), None, "unknown-channel"
@@ -223,7 +242,8 @@ class GlanceApp:
             return canvas, None, f"fallback:{label}"
 
         try:
-            return selection.scene.render(ctx, selection.params), selection, selection.key
+            rendered = self.dim(selection.scene.render(ctx, selection.params), ctx)
+            return rendered, selection, selection.key
         except Exception as exc:  # noqa: BLE001
             log.exception("scene %s failed in channel %s", selection.key, channel)
             return (
@@ -252,7 +272,11 @@ class GlanceApp:
             }
         return {
             "now": ctx.now.isoformat(),
-            "panel": {"width": self.settings.width, "height": 32},
+            "panel": {
+                "width": self.settings.width,
+                "height": 32,
+                "brightness": round(self.brightness.level_at(ctx.now), 3),
+            },
             "carousel": {
                 "mode": self.settings.carousel_mode,
                 "dwell": self.settings.carousel_dwell,

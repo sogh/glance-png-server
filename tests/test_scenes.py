@@ -239,9 +239,13 @@ def test_today_agenda_says_so_when_the_day_is_clear(cal_app):
 
 
 def test_date_scene_has_no_time_on_it(app, now):
-    """The whole point of preferring it to a clock."""
-    a, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 9, 0, tzinfo=TZ)))
-    b, _ = app.render_scene("date", {}, app.context(datetime(2026, 9, 8, 21, 45, tzinfo=TZ)))
+    """The whole point of preferring it to a clock. Brightness is pinned
+    because the evening level would otherwise make these differ for a reason
+    that has nothing to do with the date."""
+    a, _ = app.render_scene(
+        "date", {}, app.context(datetime(2026, 9, 8, 9, 0, tzinfo=TZ), brightness=1.0))
+    b, _ = app.render_scene(
+        "date", {}, app.context(datetime(2026, 9, 8, 21, 45, tzinfo=TZ), brightness=1.0))
     assert a.to_ascii() == b.to_ascii(), "same day should render identically at any hour"
 
 

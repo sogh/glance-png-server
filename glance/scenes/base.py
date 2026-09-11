@@ -31,6 +31,7 @@ class RenderContext:
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None
+    brightness: float | None = None   # None = use the schedule
 
     @property
     def width(self) -> int:

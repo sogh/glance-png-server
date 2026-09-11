@@ -129,7 +129,8 @@ def test_a_channel_with_nothing_available_falls_back(client, project):
 
 def test_status_reports_why_a_scene_is_or_is_not_showing(client):
     body = client.get("/api/status").json()
-    assert body["panel"] == {"width": 192, "height": 32}
+    assert body["panel"]["width"] == 192 and body["panel"]["height"] == 32
+    assert 0 < body["panel"]["brightness"] <= 1
     assert body["channels"]["main"]["available"] == ["todos(count=3)", "clock"]
     assert body["sources"]["todos"]["open"] == 2
     assert "clock" in body["scenes"]
@@ -225,10 +226,22 @@ def test_healthz_stays_open_but_stops_naming_channels(tokened_client):
 
 def test_the_preview_page_carries_the_token_into_its_image_urls(tokened_client):
     html = tokened_client.get(f"/preview?k={TOKEN}").text
-    assert f"/c/main.png?peek=1&k={TOKEN}" in html
+    assert "/c/main.png?peek=1" in html
     assert f"/api/status?k={TOKEN}" in html
-    # The zoom link must not drop it, or the page 404s on itself.
-    assert f"/preview?zoom=" in html and html.count(f"k={TOKEN}") > 3
+    # Every image url must carry it, or the page 404s on its own thumbnails.
+    assert html.count(f"k={TOKEN}") > 3
+    assert "/preview?zoom=" in html
+
+
+def test_the_preview_renders_at_full_brightness_by_default(client):
+    """Artwork cannot be judged through the evening dimming curve."""
+    html = client.get("/preview").text
+    assert "brightness=1" in html
+    assert "live=1" in html, "but there should be a way to see the real level"
+
+
+def test_preview_live_mode_drops_the_override(client):
+    assert "brightness=1" not in client.get("/preview?live=1").text
 
 
 def test_the_token_is_not_leaked_into_scene_params(tokened_client):
