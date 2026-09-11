@@ -173,6 +173,9 @@ The page is a thin client over these, if you would rather script it:
 | `GET /api/channels/<name>` | one channel's entries, and whether it is overridden |
 | `PUT /api/channels/<name>` | replace its entries (validated first) |
 | `POST /api/channels/<name>/reset` | drop the overlay, restore `settings.yaml` |
+| `GET /api/art` | list the artwork, with sizes |
+| `POST /api/art` | upload a file (multipart) |
+| `DELETE /api/art/<name>` | remove one |
 | `PUT /api/carousel` | mode, dwell, min advance |
 
 All of them require the access token when one is set.
@@ -311,9 +314,17 @@ private app's own "image width" field should match it.
 
 ## Your own artwork
 
-Drop PNGs into `assets/static/`. They're addressable immediately as
-`static:<filename-without-extension>` — no restart, no registration. Files are
-cached by mtime, so re-exporting from Photoshop hot-reloads the panel.
+Two ways in. **Upload them at `/edit`** — they land in `assets/static/` and
+are usable immediately as `static:<name>`, with no redeploy. Or drop files
+into `assets/static/` directly; they're picked up the same way. Files are
+cached by mtime, so re-exporting over one hot-reloads the panel.
+
+Uploads are checked before they land: the content must actually decode as an
+image, 4 MB and eight-times-panel dimensions are the ceilings, and the
+filename is reduced to letters, digits, dot, dash and underscore. That last
+one matters more than it looks — the name becomes a path, so `../../etc/x.png`
+is flattened to `x.png` and anything with shell characters is refused
+outright. Writes are atomic, so a half-uploaded file is never served.
 
 **Export at exactly 192×32.** Oversized art is downscaled nearest-neighbour
 (blocky but honest) rather than smoothly resampled — a bilinear shrink to 32px

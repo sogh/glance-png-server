@@ -12,10 +12,11 @@ import os
 import secrets
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
+from . import artstore
 from .editor import editor_page
 from .runtime import GlanceApp
 from .scenes import REGISTRY
@@ -217,6 +218,37 @@ def create_app(config_path: str | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="mode must be advance or clock")
         glance.set_carousel(values)
         return JSONResponse({"saved": values})
+
+    # --- artwork -----------------------------------------------------------
+
+    @api.get("/api/art")
+    def list_art(request: Request) -> JSONResponse:
+        require_token(request)
+        files = artstore.listing(glance.settings.static_dir, glance.settings.width)
+        return JSONResponse({
+            "panel": {"width": glance.settings.width, "height": 32},
+            "files": [f.__dict__ for f in files],
+        }, headers={"Cache-Control": NO_CACHE})
+
+    @api.post("/api/art")
+    async def upload_art(request: Request, file: UploadFile = File(...)) -> JSONResponse:
+        require_token(request)
+        data = await file.read()
+        try:
+            saved = artstore.save(
+                glance.settings.static_dir, file.filename or "", data,
+                glance.settings.width,
+            )
+        except artstore.ArtError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse({"saved": saved.__dict__})
+
+    @api.delete("/api/art/{name}")
+    def delete_art(name: str, request: Request) -> JSONResponse:
+        require_token(request)
+        if not artstore.delete(glance.settings.static_dir, name):
+            raise HTTPException(status_code=404, detail="no such file")
+        return JSONResponse({"deleted": name})
 
     @api.get("/edit", response_class=HTMLResponse)
     def edit(request: Request) -> HTMLResponse:

@@ -141,6 +141,31 @@ async function loadChannel(name) {
   render();
 }
 
+async function renderArt() {
+  const data = await api("/api/art");
+  const host = document.getElementById("artlist");
+  if (!data.files.length) { host.innerHTML = "<p class='hint'>Nothing yet.</p>"; return; }
+  host.innerHTML = data.files.map(f => `
+    <div class="row" style="grid-template-columns:150px 120px 1fr 92px">
+      <div><span class="lbl">name</span><code>static:${f.name}</code></div>
+      <div><span class="lbl">size</span>${f.width}&times;${f.height}
+        ${f.fits ? "" : `<div class="hint" style="color:#d94">not ${data.panel.width}&times;${data.panel.height}</div>`}</div>
+      <div><span class="lbl">preview</span>
+        <img src="${q("/s/static:" + encodeURIComponent(f.name) + ".png?brightness=1&_=" + Date.now())}"
+             style="width:100%"></div>
+      <div><span class="lbl">&nbsp;</span>
+        <button class="danger" data-art="${f.name}">delete</button></div>
+    </div>`).join("");
+}
+
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-art]");
+  if (!b) return;
+  if (!confirm("Delete " + b.dataset.art + "?")) return;
+  await api("/api/art/" + encodeURIComponent(b.dataset.art), {method: "DELETE"});
+  renderArt();
+});
+
 async function boot() {
   const meta = await api("/api/channels");
   SCENES = meta.scenes;
@@ -180,7 +205,26 @@ async function boot() {
     say("carousel settings saved", "ok");
   };
 
+  document.getElementById("artupload").onclick = async () => {
+    const input = document.getElementById("artfile");
+    const el = document.getElementById("artstatus");
+    if (!input.files.length) { el.className = "err"; el.textContent = "pick a file first"; return; }
+    const body = new FormData();
+    body.append("file", input.files[0]);
+    try {
+      const r = await fetch(q("/api/art"), {method: "POST", body});
+      const out = await r.json();
+      if (!r.ok) throw new Error(out.detail || "upload failed");
+      el.className = "ok";
+      el.textContent = `saved ${out.saved.filename} (${out.saved.width}x${out.saved.height})`;
+      input.value = "";
+      renderArt();
+      boot.refreshScenes && boot.refreshScenes();
+    } catch (e) { el.className = "err"; el.textContent = e.message; }
+  };
+
   await loadChannel(meta.channels[0]);
+  await renderArt();
 }
 boot().catch(e => say("failed to load: " + e.message, "err"));
 """
@@ -225,6 +269,18 @@ EDITOR_HTML = """<!doctype html><meta charset="utf-8">
 <p class="hint"><b>advance</b> steps on each fetch (respecting dwell).
  <b>clock</b> picks purely from wall-clock time. <b>min advance</b> stops a
  double fetch burning two slots.</p>
+
+<h2>Artwork</h2>
+<div class="bar">
+  <input type="file" id="artfile" accept="image/png,image/gif,image/bmp,image/webp">
+  <button id="artupload" class="primary">upload</button>
+  <span id="artstatus"></span>
+</div>
+<p class="hint">Files land in <code>assets/static/</code> and are usable
+ immediately as <code>static:&lt;name&gt;</code> &mdash; no redeploy. Export at
+ the panel's exact size; anything else is scaled nearest-neighbour, which is
+ honest but blocky.</p>
+<div id="artlist"></div>
 
 <script>window.__GLANCE_TOKEN__ = "__TOKEN__";</script>
 <script>__JS__</script>
