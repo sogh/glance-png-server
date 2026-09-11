@@ -52,7 +52,15 @@ def _fit_scale(font, texts: list[str], available: int, stacked: bool, height: in
     return 1
 
 
-@register("pulse", description="Names breathing between white and a colour")
+def _draw(c: Canvas, text: str, colour: Any, x: int, y: int, font, scale: int,
+          align: str, gradient_from: str | None) -> None:
+    if gradient_from is None:
+        c.text(x, y, text, colour, font, align, None, scale)
+    else:
+        c.text_gradient(x, y, text, gradient_from, colour, font, align, scale)
+
+
+@register("pulse", description="Names in a colour, over time or across the letters")
 def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
     items = parse_items(params.get("items", DEFAULT_ITEMS))
     if not items:
@@ -78,6 +86,19 @@ def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
     # a half-drawn name is worse than a smaller one.
     scale = min(requested, fits) if requested > 0 else fits
 
+    # This device does not decode APNG -- it renders frame zero and stops. So
+    # the default is a gradient across the letters rather than across time:
+    # the same white-to-colour transition, in one frame, visible on hardware
+    # that will never animate. `mode: pulse` restores the animation for a
+    # panel that can show it.
+    mode = str(params.get("mode", "gradient"))
+    if mode == "gradient":
+        c = ctx.canvas()
+        c.clear(background)
+        _layout(c, items, texts, font, scale, stacked, gradient=True,
+                gradient_from=params.get("from", "white"))
+        return c
+
     canvases: list[Canvas] = []
     for frame in range(frame_count):
         c = ctx.canvas()
@@ -90,19 +111,31 @@ def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
             t = (1.0 - math.cos(2.0 * math.pi * phase)) / 2.0
             shade = mix("white", color, floor + (1.0 - floor) * t)
 
-            if stacked:
-                step = font.height * scale + 2
-                top = (c.height - (len(items) * step - 2)) // 2
-                c.text(c.width // 2, top + index * step, text, shade, font,
-                       "center", c.width - 4, scale)
-            else:
-                widths = [font.measure(t2) * scale for t2 in texts]
-                gap = 8
-                total = sum(widths) + gap * (len(texts) - 1)
-                x = (c.width - total) // 2 + sum(widths[:index]) + gap * index
-                y = (c.height - font.height * scale) // 2
-                c.text(x, y, text, shade, font, "left", None, scale)
+            _place(c, texts, index, text, shade, font, scale, stacked, None)
 
         canvases.append(c)
 
     return Frames(canvases=canvases, duration=duration)
+
+
+def _place(c: Canvas, texts: list[str], index: int, text: str, colour: Any,
+           font, scale: int, stacked: bool, gradient_from: str | None) -> None:
+    """Position one item, stacked or side by side."""
+    if stacked:
+        step = font.height * scale + 2
+        top = (c.height - (len(texts) * step - 2)) // 2
+        _draw(c, text, colour, c.width // 2, top + index * step, font, scale,
+              "center", gradient_from)
+    else:
+        widths = [font.measure(t) * scale for t in texts]
+        gap = 8
+        total = sum(widths) + gap * (len(texts) - 1)
+        x = (c.width - total) // 2 + sum(widths[:index]) + gap * index
+        y = (c.height - font.height * scale) // 2
+        _draw(c, text, colour, x, y, font, scale, "left", gradient_from)
+
+
+def _layout(c: Canvas, items, texts, font, scale, stacked, gradient, gradient_from):
+    for index, (text, colour) in enumerate(items):
+        _place(c, texts, index, text, colour, font, scale, stacked,
+               gradient_from if gradient else None)

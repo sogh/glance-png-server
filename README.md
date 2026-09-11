@@ -334,71 +334,57 @@ icon and large text look great."*
 
 ---
 
-## Animation (worth a try)
+## Animation: the device does not do it
 
-The device caches each image and redraws it until its next fetch, with a 60s
-floor on the refresh interval — so animating by fetching new frames is out.
+Tested and settled. An APNG served to a Glance Scroll renders **frame zero and
+stops** — it does not animate.
 
-But **an APNG is a valid PNG**. `acTL`, `fcTL` and `fdAT` are ancillary
-chunks, and frame 0 sits in an ordinary `IDAT`. A decoder that understands
-them animates; a decoder that does not renders frame 0 and never knows the
-difference. The docs say PNG and say nothing about APNG, and small embedded
-decoders usually ignore animation chunks — so this probably shows a still.
-Trying costs nothing, and the answer is worth having.
+That is a defensible engineering call on their side: APNG needs multi-frame
+buffering, and on a chip driving LED matrices from limited RAM that is real
+memory. Most small embedded PNG decoders skip it. The gap is that the docs
+never say so, which is why this had to be settled by experiment.
 
-```
-/s/marquee.png?text=MERRY+CHRISTMAS&color=green&scale=2
-```
+Nothing here breaks because of it. An APNG is a valid PNG, so the panel shows
+frame zero cleanly — but paying for thirty frames that will never be seen is
+pointless, so the animated scenes default to a single frame now.
 
-Point a private app at that and see what the panel does. A typical marquee is
-around 30 KB of the 1 MB budget.
+`marquee` and `pulse` can still emit APNG on request (`mode: pulse`), and the
+preview page renders them, since browsers do animate. If a firmware update
+ever changes this, the mechanism is already there.
 
-Any scene can do this — return a `Frames` instead of a `Canvas`:
+**What still moves:** the device cycles between private-app slots on its own
+clock, every few seconds. That is real motion, and it is what several channels
+across several slots buys you.
 
-```python
-from ..animation import Frames
-
-@register("blink")
-def render_blink(ctx, params) -> Frames:
-    on, off = ctx.canvas(), ctx.canvas()
-    on.centered("ALERT", "red", "5x7", scale=2)
-    return Frames(canvases=[on, off], duration=400)
-```
-
-`Frames` with a single canvas encodes as a plain PNG, so there is no cost to
-using it everywhere.
-
-**If the panel does animate**, tell me and it is worth revisiting — the same
-mechanism would give animated holiday cards and a genuinely scrolling agenda.
-
-### `pulse` — names that breathe
+### `pulse` — a colour ramp across the letters
 
 ```
 /s/pulse.png?items=ADA:yellow,GRACE:blue
 ```
 
-Each item eases from white to its own colour and back, on a raised cosine so
-there is no visible seam where the loop closes. Frame zero is the all-white
-state, so a panel that ignores APNG still shows both names perfectly legibly.
+Since the panel cannot fade a colour over *time*, this fades it over *space*:
+each name ramps from white to its own colour across its characters. The same
+visual idea, in one frame, on hardware that will never animate.
 
 ```yaml
 - scene: pulse
   params:
     items: "ADA:yellow,GRACE:blue"
     layout: column      # or row, side by side
-    stagger: 0.5        # offset the items so they take turns
-    floor: 0.3          # how far back toward white the dim end goes
-    frames: 30
-    duration: 70        # ms per frame
-  dwell: 300            # hold it for five minutes
+    from: white         # the colour each name starts at
+    mode: gradient      # `pulse` instead for the APNG version
+  dwell: 300
 ```
 
 `items` is a `NAME:colour` list so the same value works from a channel config,
 the editor's params box and a query string alike. Any palette colour or
-`#rrggbb` works.
+`#rrggbb` works, in either position — `items: "ADA:white" from: yellow` runs
+the ramp the other way.
 
 The scale is chosen to fit the panel, and an explicit `scale` that would not
 fit is **clamped rather than obeyed** — a smaller name beats half a name.
+
+`Canvas.text_gradient()` does the drawing, so any scene can use it.
 
 ## A note on stale clocks
 

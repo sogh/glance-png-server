@@ -13,7 +13,7 @@ from typing import Literal
 from PIL import Image
 
 from .fonts import BitmapFont, get_font
-from .palette import RGB, parse, snap
+from .palette import RGB, mix, parse, snap
 
 PANEL_HEIGHT = 32
 PANEL_MODULE_WIDTH = 64
@@ -121,6 +121,50 @@ class Canvas:
         for i, line in enumerate(lines):
             self.text(x, y + i * step, line, color, f, align, max_width, scale)
         return max(0, len(lines) * step - leading)
+
+    def text_gradient(
+        self,
+        x: int,
+        y: int,
+        content: str,
+        start: str | RGB,
+        end: str | RGB,
+        font: BitmapFont | str = "5x7",
+        align: HAlign = "left",
+        scale: int = 1,
+    ) -> int:
+        """Draw text with the colour ramping across its characters.
+
+        A gradient in space rather than in time. On a panel that cannot
+        animate, this is how you get a colour transition into a name -- and it
+        costs one frame instead of thirty.
+        """
+        f = get_font(font) if isinstance(font, str) else font
+        scale = max(1, int(scale))
+        if not content:
+            return 0
+
+        total = f.measure(content) * scale
+        left = x if align == "left" else x - total // 2 if align == "center" else x - total
+
+        # Ramp across inked characters only, so leading spaces do not eat part
+        # of the gradient.
+        inked = [i for i, ch in enumerate(content) if ch.strip()]
+        last = len(inked) - 1 if len(inked) > 1 else 1
+
+        cursor = left
+        for i, ch in enumerate(content):
+            if ch.strip():
+                t = (inked.index(i) / last) if len(inked) > 1 else 1.0
+                colour = mix(start, end, t)
+                mask = f.mask(ch)
+                if scale > 1:
+                    mask = mask.resize(
+                        (mask.width * scale, mask.height * scale), Image.Resampling.NEAREST
+                    )
+                self.image.paste(snap(colour), (cursor, y), mask)
+            cursor += f.advance(ch) * scale
+        return total
 
     def centered(
         self,

@@ -11,7 +11,11 @@ from glance.scenes.pulse import parse_items
 
 
 def frames_of(app, params, width=192):
-    rendered, label = app.render_scene("pulse", params, width=width)
+    """Render in animated mode. `gradient` is the default now that the device
+    is known not to decode APNG, so these tests opt in explicitly."""
+    rendered, label = app.render_scene(
+        "pulse", {"mode": "pulse", **params}, width=width
+    )
     assert not label.startswith("error:")
     return rendered
 
@@ -96,3 +100,81 @@ def test_empty_items_falls_back_to_a_still(app):
 
 def test_output_is_a_valid_png(app):
     assert app.png(frames_of(app, {})).startswith(b"\x89PNG\r\n\x1a\n")
+
+
+# --- gradient mode ----------------------------------------------------------
+# The device renders frame zero of an APNG and stops, so the colour transition
+# has to happen across the letters instead of across time.
+
+def test_gradient_mode_is_a_single_frame(app):
+    rendered, _ = app.render_scene("pulse", {"mode": "gradient"})
+    assert isinstance(rendered, Canvas), "should not be animated"
+
+
+def test_gradient_is_the_default(app):
+    default, _ = app.render_scene("pulse", {})
+    assert isinstance(default, Canvas)
+
+
+def test_gradient_costs_far_less_than_the_animation(app):
+    still, _ = app.render_scene("pulse", {"mode": "gradient"})
+    moving, _ = app.render_scene("pulse", {"mode": "pulse"})
+    assert len(app.png(still)) * 5 < len(app.png(moving))
+
+
+def test_the_gradient_actually_ramps_across_the_letters(app):
+    c, _ = app.render_scene("pulse", {"items": "ADA:yellow", "mode": "gradient"})
+    px = [(x, c.image.getpixel((x, y)))
+          for x in range(c.width) for y in range(32)
+          if sum(c.image.getpixel((x, y))) > 0]
+    assert px
+    first_x, last_x = px[0][0], px[-1][0]
+    left = [p for x, p in px if x < first_x + 6]
+    right = [p for x, p in px if x > last_x - 6]
+    # White has a high blue channel; yellow has almost none.
+    assert sum(p[2] for p in left) / len(left) > 150, "should start near white"
+    assert sum(p[2] for p in right) / len(right) < 90, "should end at the colour"
+
+
+def test_each_item_ramps_to_its_own_colour(app):
+    c, _ = app.render_scene("pulse", {"items": "ADA:yellow,GRACE:blue",
+                                      "mode": "gradient"})
+    px = c.image.get_flattened_data()
+    assert [p for p in px if p[0] > 150 and p[1] > 150 and p[2] < 90], "no yellow end"
+    assert [p for p in px if p[2] > 150 and p[0] < 110], "no blue end"
+
+
+def test_the_gradient_start_colour_is_configurable(app):
+    default, _ = app.render_scene("pulse", {"items": "ABCDE:blue", "mode": "gradient"})
+    grey, _ = app.render_scene("pulse", {"items": "ABCDE:blue", "mode": "gradient",
+                                         "from": "dim"})
+    lit = lambda c: {i for i, p in enumerate(c.image.get_flattened_data()) if sum(p) > 0}
+    assert lit(default) == lit(grey), "the same pixels should be lit"
+    assert list(default.image.get_flattened_data()) != list(grey.image.get_flattened_data()), \
+        "but in different colours"
+
+
+def test_gradient_does_not_clip(app):
+    for layout in ("row", "column"):
+        c, _ = app.render_scene("pulse", {"items": "ADA:yellow,GRACE:blue",
+                                          "mode": "gradient", "layout": layout})
+        edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
+        assert all(sum(p) == 0 for p in edge), layout
+
+
+def test_a_one_character_item_does_not_divide_by_zero(app):
+    c, label = app.render_scene("pulse", {"items": "X:red", "mode": "gradient"})
+    assert not label.startswith("error:")
+    assert [p for p in c.image.get_flattened_data() if sum(p) > 0]
+
+
+def test_canvas_text_gradient_directly():
+    from glance.canvas import Canvas as C
+
+    c = C(192)
+    width = c.text_gradient(2, 12, "HELLO", "white", "red")
+    assert width > 0
+    lit = [p for p in c.image.get_flattened_data() if sum(p) > 0]
+    assert lit
+    assert any(p[2] > 150 for p in lit), "white end present"
+    assert any(p[0] > 150 and p[2] < 90 for p in lit), "red end present"
