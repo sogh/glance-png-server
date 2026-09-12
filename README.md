@@ -596,7 +596,13 @@ unless you already know the scale.
 
 Air quality is a second call to a different Open-Meteo host, cached
 separately; set `air_quality: false` to skip it. If that call fails the
-forecast is unaffected — the panel simply omits the AQI. Icons are
+forecast is unaffected — the panel simply omits the AQI.
+
+The right of the strip carries a **three-day forecast** — weekday, a 12px
+icon, and the high, colour-coded the same way. Only the high: two
+temperatures per 21px column is more than the space carries legibly, and the
+low is the one you can do without. `forecast: 0` reclaims the room, and the
+detail text expands to fill it. Icons are
 drawn from primitives in `glance/weathericons.py` (clear, partly, cloudy, fog,
 drizzle, rain, snow, thunder, plus a crescent moon at night), because circles
 and clouds are far easier to describe as overlapping discs than to type out

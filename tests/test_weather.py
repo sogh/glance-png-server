@@ -237,3 +237,88 @@ def test_air_quality_failing_does_not_lose_the_forecast(primed, tmp_path):
 def test_air_quality_can_be_disabled(primed):
     primed.air_quality = False
     assert primed._air() is None
+
+
+# --- multi-day forecast -----------------------------------------------------
+
+def _days():
+    from glance.sources.weather import DayForecast
+    return [DayForecast("2026-09-13", "rain", 65, 54),
+            DayForecast("2026-09-14", "clear", 78, 52),
+            DayForecast("2026-09-15", "snow", 34, 28)]
+
+
+def test_the_source_parses_following_days(primed, tmp_path):
+    import json
+    payload = json.loads(primed.cache_file.read_text())
+    payload["daily"] = {
+        "time": ["2026-09-12", "2026-09-13", "2026-09-14"],
+        "temperature_2m_max": [67.0, 65.4, 78.2],
+        "temperature_2m_min": [52.4, 54.1, 52.0],
+        "weather_code": [3, 61, 0],
+    }
+    primed.cache_file.write_text(json.dumps(payload))
+    w = primed.current()
+    assert [d.date for d in w.forecast] == ["2026-09-13", "2026-09-14"], "today is excluded"
+    assert w.forecast[0].condition == "rain"
+    assert w.forecast[1].condition == "clear"
+    assert w.forecast[1].high == 78
+
+
+def test_the_forecast_is_drawn(app):
+    without = render(app, Weather(60, 60, 70, 50, "cloudy", True))
+    with_days = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()))
+    lit = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
+    assert lit(with_days) > lit(without)
+
+
+def test_the_forecast_can_be_turned_off(app):
+    on = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()))
+    off = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()),
+                 {"forecast": 0})
+    assert on.to_ascii() != off.to_ascii()
+
+
+def test_fewer_days_leaves_more_room(app):
+    three = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()))
+    two = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()),
+                 {"forecast": 2})
+    assert three.to_ascii() != two.to_ascii()
+
+
+def test_forecast_highs_are_colour_coded_too(app):
+    c = render(app, Weather(60, 60, 70, 50, "cloudy", True, forecast=_days()))
+    px = c.image.get_flattened_data()
+    assert [p for p in px if p[0] > 180 and p[2] < 80], "78 should read warm"
+    assert [p for p in px if p[2] > 150 and p[0] < 110], "34 should read cold"
+
+
+def test_the_forecast_never_overflows_the_panel(app):
+    c = render(app, Weather(-12, -20, 104, -18, "snow", True,
+                            precip_chance=100, precip_now=1.25, aqi=487,
+                            forecast=_days()), {"feels": True})
+    edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
+    assert all(sum(p) == 0 for p in edge)
+
+
+def test_the_detail_text_yields_space_to_the_forecast(app):
+    """Both compete for the same strip; the text must give way rather than
+    draw over the columns."""
+    wide = render(app, Weather(60, 60, 70, 50, "cloudy", True,
+                               precip_chance=40, aqi=68))
+    narrow = render(app, Weather(60, 60, 70, 50, "cloudy", True,
+                                 precip_chance=40, aqi=68, forecast=_days()))
+    assert wide.to_ascii() != narrow.to_ascii()
+
+
+def test_a_small_sun_keeps_its_rays():
+    """At the forecast icon size the ray loop computed an empty range, so
+    'clear' drew as a bare disc indistinguishable from a full moon."""
+    from glance.canvas import Canvas
+    from glance import weathericons as wi
+    c = Canvas(20)
+    c.clear("black")
+    wi.draw(c, "clear", 1, 1, 12)
+    # Corners of the box can only be lit by rays, never by the disc.
+    corners = [c.image.getpixel((x, y)) for x in (2, 14) for y in (2, 14)]
+    assert any(sum(p) > 0 for p in corners), "no rays at 12px"

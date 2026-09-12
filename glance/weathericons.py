@@ -43,7 +43,10 @@ def sun(c, x, y, size, night=False):
         c.disc(cx + r // 2 + 1, cy - 1, r, "black")
         return
     c.disc(cx, cy, r, color)
-    reach, gap = int(size * 0.46), r + 2
+    gap = r + 2
+    # reach must clear the gap or range() is empty and the sun loses its rays
+    # entirely -- which is exactly what happened at the forecast icon size.
+    reach = max(gap + 2, int(size * 0.5))
     for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (1, -1), (-1, 1), (1, 1)):
         for step in range(gap, reach):
             c.pixel(cx + dx * step, cy + dy * step, dim(color, 0.9))

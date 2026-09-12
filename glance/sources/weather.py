@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -65,6 +65,14 @@ LABELS = {
 
 
 @dataclass
+class DayForecast:
+    date: str                 # ISO, so the scene can label it however it likes
+    condition: str
+    high: float
+    low: float
+
+
+@dataclass
 class Weather:
     temperature: float
     feels_like: float
@@ -76,6 +84,7 @@ class Weather:
     precip_chance: int | None = None      # today's max probability, percent
     precip_now: float = 0.0               # falling right now, inches
     aqi: int | None = None                # US AQI
+    forecast: list["DayForecast"] = field(default_factory=list)
 
     @property
     def label(self) -> str:
@@ -142,7 +151,8 @@ class WeatherSource:
                     "temperature_unit": self.units,
                     "precipitation_unit": "inch",
                     "timezone": "auto",
-                    "forecast_days": 1,
+                    # Today plus three: the strip has room for three columns.
+                    "forecast_days": 4,
                 })
                 resp.raise_for_status()
                 data = resp.json()
@@ -198,6 +208,19 @@ class WeatherSource:
             aqi_raw = (air.get("current") or {}).get("us_aqi")
             chance = (daily.get("precipitation_probability_max") or [None])[0]
 
+            days: list[DayForecast] = []
+            times = daily.get("time") or []
+            codes = daily.get("weather_code") or []
+            highs = daily.get("temperature_2m_max") or []
+            lows = daily.get("temperature_2m_min") or []
+            for i in range(1, min(len(times), len(codes), len(highs), len(lows))):
+                days.append(DayForecast(
+                    date=str(times[i]),
+                    condition=WMO.get(int(codes[i]), "cloudy"),
+                    high=round(float(highs[i])),
+                    low=round(float(lows[i])),
+                ))
+
             return Weather(
                 temperature=round(float(cur["temperature_2m"])),
                 feels_like=round(float(cur.get("apparent_temperature", cur["temperature_2m"]))),
@@ -209,6 +232,7 @@ class WeatherSource:
                 precip_chance=None if chance is None else round(float(chance)),
                 precip_now=float(cur.get("precipitation", 0) or 0),
                 aqi=None if aqi_raw is None else round(float(aqi_raw)),
+                forecast=days,
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             self.last_error = f"unexpected payload: {exc}"
