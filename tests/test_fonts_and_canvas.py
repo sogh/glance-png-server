@@ -146,7 +146,7 @@ def test_fit_downscales_oversized_art_without_distorting_it():
 def test_fonts_cover_what_the_scenes_actually_draw(font):
     """A missing glyph does not fail loudly, it renders '?' -- which is how
     "13%" reached the panel as "13?"."""
-    used = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ %@°.:,-/'!?()+"
+    used = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ %@&°.:,;-/'\"!?()+*=<>[]_#$"
     missing = [c for c in used if c not in font.source]
     assert not missing, f"{font.name} cannot draw {missing}"
 

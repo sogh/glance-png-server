@@ -266,6 +266,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |
+| `columns` | Three columns of upcoming events, packed by day | there's an upcoming event |
 | `reminders` | Open items from `reminders.json` | anything is undone |
 | `todos` | Same scene, older name | anything is undone |
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
@@ -653,6 +654,34 @@ accounts, not personal ones.
 
 The age appears top-right in amber once the figure passes `stale_after`
 (default 6 hours). A silent panel means the number is current.
+
+### `columns` — as much of the week as fits
+
+```
+┌──────────────────┬──────────────────┬──────────────────┐
+│ TODAY            │ TODAY            │ TMRW             │
+│ 7a  Feed animals │ 3p  Fence repair │ 10a Al-Anon Zoom │
+│ 9a  Farmers mar… │ 6p  Dinner w/ S… │                  │
+│ 11:30a Vet visit │                  │                  │
+│ 1p  Deliver eggs │                  │                  │
+└──────────────────┴──────────────────┴──────────────────┘
+```
+
+192 divides into three 64px columns, which is **exactly one physical LED
+module each** — the layout lands on the hardware's own seams.
+
+Days are packed greedily. A day fills its column; if it has more events than
+fit, it spills into the next and pushes the following day along. Best case is
+three days of a few events each; worst case is one busy day taking all three
+columns, which is the right thing to show when that is what the day looks
+like. A continuation column repeats the day label dimmed, so the eye does not
+read it as a new day.
+
+**The budget:** 4 events per column, 12 in total, with roughly 10 characters
+of title each. Times drop their minutes on the hour — `9a` rather than `9:00a`
+— which buys ten pixels of title on half the rows, and a 64px column has none
+to spare. Anything that still does not fit is counted in a `+N` badge rather
+than silently dropped.
 
 ### Reminders without a calendar
 
