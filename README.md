@@ -677,12 +677,15 @@ columns, which is the right thing to show when that is what the day looks
 like. A continuation column repeats the day label dimmed, so the eye does not
 read it as a new day.
 
-`from_days` shifts the window, which lets two slots cover six days between
-them: one at `from_days: 0` showing today onward, another at `from_days: 3`
-picking up where it leaves off. It skips whole *calendar* days rather than
-whole event-groups — skipping groups would be unpredictable, since one busy
-day can fill every column and "skip 3 days of events" could silently jump a
-week.
+**`skip_columns` pairs two panels into one continuous view.** One at
+`skip_columns: 0` shows columns 1–3, another at `3` shows columns 4–6 — no
+overlap, no gap, *whatever* the packing does. That is the thing an offset
+measured in days cannot give you: whether the near panel spilled is exactly
+what decides where the far one should start. A day that straddles the
+boundary simply continues into the second panel rather than restarting.
+
+`from_days` is also there if you want a fixed "next week" window instead; it
+skips whole calendar days.
 
 **The budget:** 4 events per column, 12 in total, with roughly 10 characters
 of title each. Times drop their minutes on the hour — `9a` rather than `9:00a`

@@ -110,8 +110,11 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("calendar", "select", None, options="@calendars",
                     help="Which feed, or blank for all"),
               Param("columns", "number", 3, minimum=1, maximum=6),
-              Param("days", "number", 3, minimum=1, maximum=6,
-                    help="How many distinct days to consider"),
+              Param("skip_columns", "number", 0, minimum=0, maximum=9,
+                    help="Start this many columns in. Pair two panels with 0 "
+                         "and 3 and they run continuously, whatever the packing."),
+              Param("days", "number", None, minimum=1, maximum=12,
+                    help="Distinct days to consider; defaults to the column count"),
               Param("hour24", "bool", False),
               Param("accent", "color", "amber", options="@colors"),
               Param("from_days", "number", 0, minimum=0, maximum=30,
@@ -129,16 +132,32 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     count = max(1, int(params.get("columns", 3)))
     width = c.width // count
 
+    # Skipping *columns* rather than days is what makes two panels continuous:
+    # one shows columns 1-3 and the other 4-6, so they never overlap and never
+    # leave a gap, however the days happen to pack. Skipping calendar days
+    # cannot do that -- whether the near view spilled is exactly what decides
+    # where the far view should start.
+    skip = max(0, int(params.get("skip_columns", 0)))
+    total = skip + count
+
     events = _events(ctx, params)
     if not events:
-        skip = int(params.get("from_days", 0))
-        message = (f"nothing after {skip} days" if skip else "nothing scheduled")
+        ahead = int(params.get("from_days", 0))
+        message = (f"nothing after {ahead} days" if ahead else "nothing scheduled")
         c.centered(str(params.get("empty", message)), "dim", small,
                    max_width=c.width - 4)
         return c
 
-    days = group_by_day(events)[:max(1, int(params.get("days", 3)))]
-    layout = plan(days, count)
+    # Each column can be a different day, so consider at least as many days as
+    # there are columns to fill.
+    day_limit = max(1, int(params.get("days", total)))
+    days = group_by_day(events)[:day_limit]
+    layout = plan(days, total)[skip:]
+
+    if not layout:
+        c.centered(str(params.get("empty", "nothing further")), "dim", small,
+                   max_width=c.width - 4)
+        return c
 
     for index, column in enumerate(layout):
         x = index * width

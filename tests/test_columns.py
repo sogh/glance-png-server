@@ -194,3 +194,64 @@ def test_an_empty_far_view_says_why(app):
     simply being skipped."""
     c = render(app, [ev(0, 9, 0, "only today")], {"from_days": 3})
     assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 0
+
+
+# --- column offset: making two panels continuous ----------------------------
+
+def week():
+    return [ev(0, 9, 0, "Feed"), ev(0, 14, 0, "Eggs"),
+            ev(1, 10, 0, "Zoom"), ev(2, 11, 0, "Bowling"),
+            ev(3, 6, 45, "Scan"), ev(4, 12, 0, "Haircut"),
+            ev(5, 9, 0, "Prep"), ev(6, 10, 0, "Tour")]
+
+
+def test_skipping_columns_continues_where_the_first_panel_stopped(app):
+    near = render(app, week())
+    far = render(app, week(), {"skip_columns": 3})
+    assert near.to_ascii() != far.to_ascii()
+
+
+@pytest.mark.parametrize("shape", ["quiet", "busy", "enormous"])
+def test_the_two_panels_never_overlap_and_never_gap(shape):
+    """Whatever the packing, columns[0:3] and columns[3:6] are adjacent."""
+    from datetime import date
+
+    def fake(n): return list(range(n))
+    days = {
+        "quiet": [(date(2026, 9, d), fake(2)) for d in range(13, 20)],
+        "busy": [(date(2026, 9, 13), fake(7))] + [(date(2026, 9, d), fake(2))
+                                                  for d in range(14, 19)],
+        "enormous": [(date(2026, 9, 13), fake(20)), (date(2026, 9, 14), fake(3))],
+    }[shape]
+
+    full = plan(days, 6)
+    near, far = full[0:3], full[3:6]
+    assert len(near) + len(far) == len(full)
+    # Every event appears exactly once across the two panels, in order.
+    seen = [e for column in near + far for e in column["events"]]
+    assert seen == [e for column in full for e in column["events"]]
+
+
+def test_a_day_that_spans_the_boundary_continues_rather_than_restarting():
+    from datetime import date
+
+    def fake(n): return list(range(n))
+    full = plan([(date(2026, 9, 13), fake(20))], 6)
+    assert full[3]["continued"], "the far panel should carry on the same day"
+    assert full[3]["day"] == full[2]["day"]
+
+
+def test_the_day_limit_grows_with_the_column_count(app):
+    """Six columns can be six different days, so six days must be considered."""
+    near = render(app, week(), {"skip_columns": 3})
+    assert sum(1 for p in near.image.get_flattened_data() if sum(p) > 0) > 60
+
+
+def test_skipping_past_everything_says_so_rather_than_drawing_blank(app):
+    c = render(app, [ev(0, 9, 0, "only one")], {"skip_columns": 3})
+    assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 0
+
+
+def test_zero_skip_is_unchanged(app):
+    assert (render(app, week()).to_ascii()
+            == render(app, week(), {"skip_columns": 0}).to_ascii())
