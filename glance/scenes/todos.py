@@ -8,7 +8,7 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 
 def _open(ctx: RenderContext, params: dict[str, Any]):
@@ -46,8 +46,21 @@ def due_badge(todo, today: date) -> tuple[str, str]:
     return "", "white"
 
 
-@register("reminders", available=_available, description="Open reminders")
-@register("todos", available=_available, description="Open items from the reminders file")
+REMINDER_PARAMS = [
+    Param("count", "number", 3, minimum=1, maximum=4, help="How many rows"),
+    Param("style", "select", "list", options=["list", "hero"],
+          help="hero draws only the most pressing one, large"),
+    Param("header", "bool", True, help="Show the title bar and count"),
+    Param("title", "text", "REMINDERS", help="Header text"),
+    Param("accent", "color", "sky", options="@colors"),
+    Param("tag", "text", None, help="Only items with this tag"),
+]
+
+
+@register("reminders", available=_available, description="Open reminders",
+          params=REMINDER_PARAMS)
+@register("todos", available=_available, description="Open items from the reminders file",
+          params=REMINDER_PARAMS)
 def render_todos(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     items = _open(ctx, params)
     c = ctx.canvas()

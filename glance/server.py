@@ -17,9 +17,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from . import artstore
+from .fonts import FONTS
+from .palette import NAMED
+from .sprites import SPRITES
 from .editor import editor_page
 from .runtime import GlanceApp
 from .scenes import REGISTRY
+from .scenes.base import COMMON_PARAMS, schema_for, validate_params
 from .scenes.static_image import list_static
 
 log = logging.getLogger("glance")
@@ -125,6 +129,38 @@ def create_app(config_path: str | None = None) -> FastAPI:
         if not secrets.compare_digest(supplied, token):
             raise HTTPException(status_code=404, detail="not found")
 
+    def resolve_options(marker: Any) -> Any:
+        """Turn an "@..." marker into the live list it stands for."""
+        if not isinstance(marker, str) or not marker.startswith("@"):
+            return marker
+        if marker == "@colors":
+            return sorted(NAMED)
+        if marker == "@fonts":
+            return sorted(FONTS)
+        if marker == "@sprites":
+            return sorted(SPRITES)
+        if marker == "@scenes":
+            return sorted(REGISTRY)
+        if marker == "@calendars":
+            return glance.calendars.names
+        if marker == "@static":
+            return [f.name for f in artstore.listing(glance.settings.static_dir)]
+        return []
+
+    def scene_catalogue() -> list[dict[str, Any]]:
+        out = []
+        for sid in sorted(REGISTRY):
+            scene = REGISTRY[sid]
+            params = [p.as_dict() for p in list(schema_for(sid)) + list(COMMON_PARAMS)]
+            for entry in params:
+                entry["options"] = resolve_options(entry["options"])
+            out.append({
+                "id": sid,
+                "description": getattr(scene, "description", ""),
+                "params": params,
+            })
+        return out
+
     def tokened(url: str) -> str:
         """Append the token to a URL the preview page will request."""
         if not token:
@@ -167,6 +203,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
             "overridden": sorted(overlay.get("channels", {})),
             "scenes": sorted(s for s in REGISTRY if s != "static"),
             "static": [f"static:{n}" for n in list_static(glance.context())],
+            "catalogue": scene_catalogue(),
             "carousel": {
                 "mode": glance.settings.carousel_mode,
                 "dwell": glance.settings.carousel_dwell,
@@ -193,15 +230,26 @@ def create_app(config_path: str | None = None) -> FastAPI:
         # the panel down until someone edited JSON by hand over SSH.
         from .config import _parse_entry
 
+        warnings: list[str] = []
         for item in body.entries:
             try:
-                _parse_entry(item)
+                parsed = _parse_entry(item)
             except Exception as exc:  # noqa: BLE001
                 raise HTTPException(status_code=400, detail=f"bad entry {item!r}: {exc}") from exc
+            # A param that does not exist used to be accepted and then quietly
+            # ignored, which is the worst of both. Report it without refusing
+            # the save, since a config written before the schema may carry one.
+            base = parsed.ref.split(":", 1)[0] if ":" in parsed.ref else parsed.ref
+            warnings += [f"{parsed.ref}: {w}"
+                         for w in validate_params(base, parsed.params, resolve_options)]
 
         glance.set_channel(name, body.entries)
         glance.carousel.reset(name)      # start the edited rotation from the top
-        return JSONResponse({"saved": name, "entries": glance.channel_spec(name)})
+        return JSONResponse({
+            "saved": name,
+            "entries": glance.channel_spec(name),
+            "warnings": warnings,
+        })
 
     @api.post("/api/channels/{name}/reset")
     def reset_channel(name: str, request: Request) -> JSONResponse:

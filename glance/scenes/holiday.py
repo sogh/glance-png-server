@@ -8,7 +8,7 @@ from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
 from ..sources.holidays import active_holidays
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 from .static_image import load_image, resolve_path
 
 
@@ -36,7 +36,13 @@ def countdown_label(days: int) -> str:
     return f"{abs(days)} DAYS AGO"
 
 
-@register("holiday", available=_available, description="The currently active holiday")
+@register("holiday", available=_available, description="The currently active holiday",
+          params=[
+              Param("name", "text", None, help="Pin to one holiday by name or slug"),
+              Param("index", "number", 0, minimum=0,
+                    help="Which one, when several are active at once"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_holiday(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     hits = _active(ctx, params)
     c = ctx.canvas()

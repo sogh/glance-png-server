@@ -101,7 +101,22 @@ fi
 
 TARBALL="$(mktemp -t glance-deploy).tar.gz"
 REMOTE_SCRIPT_TMP="/tmp/glance-remote-pve.$$.sh"
-cleanup() { rm -f "$TARBALL"; }
+
+# A deploy touches the Proxmox host several times -- a lookup, two copies and
+# the run. Without multiplexing that is a separate TCP session, and a separate
+# password prompt, for each one. ControlMaster opens the first connection and
+# the rest ride on it, so password auth costs exactly one prompt.
+# (Set up a key with `ssh-copy-id` and it costs none.)
+SSH_CTL="${TMPDIR:-/tmp}/glance-ssh-$$"
+SSH_OPTS=(-o ControlMaster=auto -o ControlPath="$SSH_CTL" -o ControlPersist=120)
+
+cleanup() {
+  rm -f "$TARBALL"
+  # Close the shared connection rather than leaving it idling for ControlPersist.
+  [[ -S "$SSH_CTL" ]] && ssh -O exit -o ControlPath="$SSH_CTL" "$PVE" 2>/dev/null
+  rm -f "$SSH_CTL"
+  return 0
+}
 trap cleanup EXIT
 
 echo "==> packaging $ROOT"
@@ -116,14 +131,25 @@ if [[ $DRY -eq 1 ]]; then
   exit 0
 fi
 
+# --- open the shared connection ---------------------------------------------
+# Doing this explicitly means the one password prompt (if any) happens here,
+# with an explanation, rather than in the middle of a copy.
+USES_KEY=1
+if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${SSH_OPTS[@]}" "$PVE" true 2>/dev/null; then
+  USES_KEY=0
+  echo "==> connecting to $PVE (password needed once; all steps share this connection)"
+  ssh "${SSH_OPTS[@]}" -o ControlPersist=120 "$PVE" true || {
+    echo "error: could not connect to $PVE" >&2; exit 1; }
+fi
+
 # --- resolve the container id ----------------------------------------------
 if [[ -z "$CTID" ]]; then
   echo "==> looking for an existing container named '$CT_NAME' on $PVE"
-  CTID="$(ssh "$PVE" "pct list 2>/dev/null | awk 'NR>1 && \$NF==\"$CT_NAME\" {print \$1; exit}'" || true)"
+  CTID="$(ssh "${SSH_OPTS[@]}" "$PVE" "pct list 2>/dev/null | awk 'NR>1 && \$NF==\"$CT_NAME\" {print \$1; exit}'" || true)"
   if [[ -n "$CTID" ]]; then
     echo "    found ctid $CTID"
   else
-    CTID="$(ssh "$PVE" "pvesh get /cluster/nextid")"
+    CTID="$(ssh "${SSH_OPTS[@]}" "$PVE" "pvesh get /cluster/nextid")"
     echo "    none found; will create ctid $CTID"
     if [[ -z "$IP" ]]; then
       cat >&2 <<'MSG'
@@ -146,8 +172,8 @@ fi
 
 # --- ship it ----------------------------------------------------------------
 echo "==> copying to $PVE"
-scp -q "$TARBALL" "$PVE:/tmp/glance-deploy.$$.tar.gz"
-scp -q "$ROOT/deploy/_remote-pve.sh" "$PVE:$REMOTE_SCRIPT_TMP"
+scp -q "${SSH_OPTS[@]}" "$TARBALL" "$PVE:/tmp/glance-deploy.$$.tar.gz"
+scp -q "${SSH_OPTS[@]}" "$ROOT/deploy/_remote-pve.sh" "$PVE:$REMOTE_SCRIPT_TMP"
 
 # Passed as environment variables rather than positionally -- fifteen ordered
 # arguments is a silent-corruption bug waiting to happen.
@@ -161,7 +187,7 @@ REMOTE_ENV=(
 )
 
 set +e
-OUTPUT="$(ssh "$PVE" "${REMOTE_ENV[*]} bash '$REMOTE_SCRIPT_TMP'; \
+OUTPUT="$(ssh "${SSH_OPTS[@]}" "$PVE" "${REMOTE_ENV[*]} bash '$REMOTE_SCRIPT_TMP'; \
   rc=\$?; rm -f '$REMOTE_SCRIPT_TMP' '/tmp/glance-deploy.$$.tar.gz'; exit \$rc" 2>&1)"
 RC=$?
 set -e
@@ -190,3 +216,14 @@ cat <<MSG
     status:   curl -s http://${CT_IP}${SUFFIX}/api/status
     redeploy: deploy/pve-deploy.sh --pve $PVE
 MSG
+
+if [[ $USES_KEY -eq 0 ]]; then
+  cat <<MSG
+    To stop being asked for a password at all:
+
+        ssh-copy-id $PVE
+
+    One key, then every deploy is silent.
+
+MSG
+fi

@@ -122,9 +122,28 @@ http://your-host:8080/edit
 ```
 
 Per entry: reorder with the arrows, toggle `enabled`, set `dwell`, mark an
-entry as `takeover`, edit its params as JSON, and see a live thumbnail of what
-it renders. Below that, the carousel's own `mode`, clock `dwell` and
-`min advance`.
+entry as `takeover`, and see a live thumbnail of what it renders. Below that,
+the carousel's own `mode`, clock `dwell` and `min advance`, and a file input
+for artwork.
+
+**Every scene declares its parameters**, so the editor draws real controls —
+dropdowns listing the actual sprites, fonts, colours and calendars you have,
+numbers with their bounds, checkboxes for flags, and each one's purpose on
+hover. Before this the params were a raw JSON box, and the only way to learn
+what a scene accepted was to read its source.
+
+Only values that differ from the default are stored, so the overlay stays a
+short list of decisions rather than a dump of every knob. A save reports
+anything it did not recognise:
+
+```
+sprite: 'befoer' is not a parameter of sprite (known: after, always,
+background, before, color, font, gap, scale, sprite, sprite_scale)
+```
+
+It still saves — a config written before the schema may legitimately carry an
+extra key — but a typo is no longer silently ignored, which is what it was
+before. `when` is there too, as JSON with examples, under *when / advanced*.
 
 ### It never writes to settings.yaml
 
@@ -663,6 +682,10 @@ Everything runs from your Mac over **one SSH hop to the Proxmox host**. Inside
 the container the work happens through `pct exec` and `pct push`, so the
 container never needs `sshd`, authorised keys, or to be reachable from your
 laptop at all.
+
+> **First time?** Run `ssh-copy-id root@proxmox` once and deploys are silent.
+> Without a key you get exactly one password prompt: every step shares a single
+> multiplexed connection rather than opening four.
 
 ```bash
 # first time -- creates the container, installs, starts it

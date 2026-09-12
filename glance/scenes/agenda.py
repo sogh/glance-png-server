@@ -8,7 +8,7 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 CHIP_WIDTH = 50
 
@@ -68,7 +68,22 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
     return bool(_events(ctx, params))
 
 
-@register("agenda", available=_available, description="Next calendar event(s)")
+AGENDA_PARAMS = [
+    Param("calendar", "select", None, options="@calendars",
+          help="Which feed, or blank for all. Comma-separate for several."),
+    Param("count", "number", 1, minimum=1, maximum=3,
+          help="1 draws the hero layout; 2-3 stack as a list"),
+    Param("today", "bool", False, help="Only what is left today"),
+    Param("hour24", "bool", False, help="24-hour clock"),
+    Param("lookahead_days", "number", 14, minimum=1, maximum=90),
+    Param("accent", "color", "amber", options="@colors"),
+    Param("location", "bool", True, help="Show the location under the title"),
+    Param("empty", "text", None, help="What to say when there is nothing"),
+]
+
+
+@register("agenda", available=_available, description="Next calendar event(s)",
+          params=AGENDA_PARAMS)
 def render_agenda(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     events = _events(ctx, params)
     count = int(params.get("count", 1))
@@ -185,6 +200,6 @@ def _today_defaults(params: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("today-agenda", available=lambda c, p: _available(c, _today_defaults(p)),
-          description="What is left on today's calendar")
+          description="What is left on today's calendar", params=AGENDA_PARAMS)
 def render_today(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return render_agenda(ctx, _today_defaults(params))

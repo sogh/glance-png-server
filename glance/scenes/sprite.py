@@ -10,10 +10,25 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..sprites import SPRITES, draw_sprite, get_sprite
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 
-@register("sprite", description="Text with a pixel-art sprite set into it")
+@register("sprite", description="Text with a pixel-art sprite set into it",
+          params=[
+              Param("before", "text", "", help="Text to the left of the art"),
+              Param("after", "text", "", help="Text to the right"),
+              Param("sprite", "select", "sweatpants", options="@sprites"),
+              Param("color", "color", "white", options="@colors",
+                    help="The text; the sprite keeps its own palette"),
+              Param("font", "select", "5x7", options="@fonts"),
+              Param("gap", "number", 5, minimum=0, maximum=40,
+                    help="Pixels between art and text"),
+              Param("scale", "number", 4, minimum=1, maximum=4,
+                    help="Ceiling on text size, not a fixed size"),
+              Param("sprite_scale", "number", 1, minimum=1, maximum=4,
+                    help="Whole-number multiplier on the art"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_sprite(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
@@ -30,7 +45,13 @@ def render_sprite(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     font = get_font(str(params.get("font", "5x7")))
     gap = int(params.get("gap", 5))
 
-    sprite_scale = max(1, int(params.get("sprite_scale", 1)))
+    # Clamp, like the text scale: sprite_scale 2 on a 24x25 sprite is 50px
+    # tall on a 32px panel, and would simply be cut off.
+    requested_sprite_scale = max(1, int(params.get("sprite_scale", 1)))
+    sprite_scale = requested_sprite_scale
+    while sprite_scale > 1 and (sprite.height * sprite_scale > c.height
+                                or sprite.width * sprite_scale > c.width - 4):
+        sprite_scale -= 1
     sprite_w = sprite.width * sprite_scale
 
     # The sprite is the fixed part; the text gets whatever is left. On a
@@ -77,7 +98,7 @@ def render_sprite(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("sprites", description="Every sprite, for checking the art")
+@register("sprites", description="Every sprite, for checking the art", params=[])
 def render_sprite_sheet(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear("black")

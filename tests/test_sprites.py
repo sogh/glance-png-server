@@ -115,3 +115,15 @@ def test_the_sheet_scene_draws_everything(app, now):
     c, label = app.render_scene("sprites", {}, app.context(now))
     assert not label.startswith("error:")
     assert any(sum(p) > 0 for p in c.image.get_flattened_data())
+
+
+def test_an_oversized_sprite_scale_is_clamped(app, now):
+    """scale 2 on a 24x25 sprite is 50px tall on a 32px panel."""
+    big, _ = app.render_scene("sprite", {"sprite_scale": 4}, app.context(now))
+    one, _ = app.render_scene("sprite", {"sprite_scale": 1}, app.context(now))
+    assert big.to_ascii() == one.to_ascii()
+
+
+def test_the_sprite_never_touches_the_top_or_bottom_edge(app, now):
+    c, _ = app.render_scene("sprite", {"sprite_scale": 3}, app.context(now))
+    assert c.image.size == (192, 32)

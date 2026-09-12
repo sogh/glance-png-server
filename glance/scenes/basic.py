@@ -8,10 +8,20 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 
-@register("clock", description="Time and date")
+@register("clock", description="Time and date",
+          params=[
+              Param("hour24", "bool", False),
+              Param("date", "bool", True, help="Show the date line"),
+              Param("lead", "number", 0, minimum=0, maximum=900,
+                    help="Seconds to shift forward; set to half your refresh "
+                         "interval so the error is centred rather than always slow"),
+              Param("color", "color", "white", options="@colors"),
+              Param("accent", "color", "sky", options="@colors"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_clock(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
@@ -53,7 +63,14 @@ def render_clock(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("date", description="Day and date, no clock")
+@register("date", description="Day and date, no clock",
+          params=[
+              Param("year", "bool", True, help="Include the year"),
+              Param("rule", "bool", True, help="Hairline along the bottom"),
+              Param("color", "color", "white", options="@colors"),
+              Param("accent", "color", "sky", options="@colors"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_date(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     """The date on its own.
 
@@ -82,7 +99,17 @@ def render_date(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("text", description="Fixed text from the channel config")
+@register("text", description="Fixed text from the channel config",
+          params=[
+              Param("text", "text", "", help="The main line"),
+              Param("sub", "text", None, help="Smaller line beneath"),
+              Param("color", "color", "white", options="@colors"),
+              Param("sub_color", "color", None, options="@colors"),
+              Param("font", "select", "5x7", options="@fonts"),
+              Param("scale", "number", None, minimum=1, maximum=4,
+                    help="Blank fits it automatically"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_text(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
@@ -109,14 +136,21 @@ def render_text(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("blank", description="An intentionally dark panel")
+@register("blank", description="An intentionally dark panel",
+          params=[Param("background", "color", "black", options="@colors")])
 def render_blank(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
     return c
 
 
-@register("countdown", description="Days remaining until a target date")
+@register("countdown", description="Days remaining until a target date",
+          params=[
+              Param("date", "text", None, help="Target date, YYYY-MM-DD"),
+              Param("label", "text", "", help="What it is counting to"),
+              Param("color", "color", "amber", options="@colors"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
@@ -146,7 +180,9 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("panels", description="Test card: shows the physical 64px modules")
+@register("panels", description="Test card: shows the physical 64px modules",
+          params=[Param("module", "number", 64, minimum=8, maximum=192,
+                        help="Module width; 64 unless your hardware is unusual")])
 def render_panels(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     """A test card for working out what your hardware actually is.
 

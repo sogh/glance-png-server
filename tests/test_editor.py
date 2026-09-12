@@ -189,3 +189,72 @@ def tokened_client(project: Path) -> TestClient:
     data.setdefault("server", {})["access_token"] = TOKEN
     cfg.write_text(yaml.safe_dump(data))
     return TestClient(create_app(str(cfg)))
+
+
+# --- parameter schemas ------------------------------------------------------
+# Before these, the editor showed a raw JSON box: the only way to learn what a
+# scene accepted was to read its source, and a typo was silently ignored.
+
+def test_every_scene_publishes_its_parameters(client):
+    catalogue = {s["id"]: s for s in client.get("/api/channels").json()["catalogue"]}
+    assert set(catalogue) >= {"sprite", "weather", "agenda", "date", "pulse"}
+    for scene in catalogue.values():
+        for param in scene["params"]:
+            assert {"name", "type", "default"} <= set(param), scene["id"]
+
+
+def test_sprite_publishes_the_params_you_would_have_had_to_read_the_source_for(client):
+    catalogue = {s["id"]: s for s in client.get("/api/channels").json()["catalogue"]}
+    names = {p["name"] for p in catalogue["sprite"]["params"]}
+    assert {"before", "after", "sprite", "gap", "sprite_scale"} <= names
+
+
+def test_dynamic_options_are_resolved_to_live_values(client):
+    catalogue = {s["id"]: s for s in client.get("/api/channels").json()["catalogue"]}
+    by_name = {p["name"]: p for p in catalogue["sprite"]["params"]}
+    assert "sweatpants" in by_name["sprite"]["options"]
+    assert "5x7" in by_name["font"]["options"]
+    assert "amber" in by_name["color"]["options"]
+
+
+def test_select_options_never_leak_a_marker(client):
+    for scene in client.get("/api/channels").json()["catalogue"]:
+        for param in scene["params"]:
+            assert not isinstance(param["options"], str), \
+                f"{scene['id']}.{param['name']} still says {param['options']}"
+
+
+def test_a_mistyped_param_is_reported_on_save(client):
+    r = client.put("/api/channels/main", json={"entries": [
+        {"ref": "sprite", "params": {"befoer": "It's"}}]})
+    assert r.status_code == 200, "saved anyway, since old configs may carry one"
+    assert any("befoer" in w for w in r.json()["warnings"])
+
+
+def test_an_out_of_range_value_is_reported(client):
+    r = client.put("/api/channels/main", json={"entries": [
+        {"ref": "sprite", "params": {"gap": 9999}}]})
+    assert any("gap" in w for w in r.json()["warnings"])
+
+
+def test_a_value_outside_a_select_is_reported(client):
+    r = client.put("/api/channels/main", json={"entries": [
+        {"ref": "sprite", "params": {"font": "comic-sans"}}]})
+    assert any("font" in w for w in r.json()["warnings"])
+
+
+def test_a_correct_save_warns_about_nothing(client):
+    r = client.put("/api/channels/main", json={"entries": [
+        {"ref": "sprite", "params": {"before": "It's", "after": "season!", "gap": 6}}]})
+    assert r.json()["warnings"] == []
+
+
+def test_common_params_are_offered_on_every_scene(client):
+    for scene in client.get("/api/channels").json()["catalogue"]:
+        assert "always" in {p["name"] for p in scene["params"]}, scene["id"]
+
+
+def test_the_editor_page_no_longer_ships_a_raw_json_box_for_params(client):
+    html = client.get("/edit").text
+    assert "catalogue" in html
+    assert "params (json)" not in html

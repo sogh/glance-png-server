@@ -8,7 +8,7 @@ from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
 from ..weathericons import draw as draw_icon
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 WARM = 75
 COLD = 45
@@ -30,7 +30,14 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
     return ctx.weather is not None and ctx.weather.current() is not None
 
 
-@register("weather", available=_available, description="Current conditions")
+@register("weather", available=_available, description="Current conditions",
+          params=[
+              Param("color", "color", "white", options="@colors",
+                    help="Only used for mild temperatures; hot and cold pick their own"),
+              Param("accent", "color", "amber", options="@colors"),
+              Param("feels", "bool", True, help="Show 'feels like' when it differs"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))

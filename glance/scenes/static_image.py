@@ -14,7 +14,7 @@ from typing import Any
 from PIL import Image
 
 from ..canvas import Canvas
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 _cache: dict[Path, tuple[float, Image.Image]] = {}
 _lock = threading.Lock()
@@ -62,7 +62,15 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
     return bool(name) and resolve_path(ctx, str(name)) is not None
 
 
-@register("static", available=_available, description="A PNG file from assets/static/")
+@register("static", available=_available, description="A PNG file from assets/static/",
+          params=[
+              Param("name", "select", None, options="@static", help="Which file"),
+              Param("align", "select", "center", options=["left", "center", "right"]),
+              Param("valign", "select", "middle", options=["top", "middle", "bottom"]),
+              Param("caption", "text", None, help="Text bar along the bottom"),
+              Param("caption_color", "color", "white", options="@colors"),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_static(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     name = str(params.get("name", ""))
     path = resolve_path(ctx, name)

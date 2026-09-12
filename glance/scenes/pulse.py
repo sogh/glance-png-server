@@ -15,7 +15,7 @@ from ..animation import Frames
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import mix
-from .base import RenderContext, register
+from .base import Param, RenderContext, register
 
 DEFAULT_ITEMS = "ADA:yellow,GRACE:blue"
 
@@ -60,7 +60,25 @@ def _draw(c: Canvas, text: str, colour: Any, x: int, y: int, font, scale: int,
         c.text_gradient(x, y, text, gradient_from, colour, font, align, scale)
 
 
-@register("pulse", description="Names in a colour, over time or across the letters")
+@register("pulse", description="Names in a colour, over time or across the letters",
+          params=[
+              Param("items", "text", DEFAULT_ITEMS,
+                    help="NAME:colour, comma separated"),
+              Param("mode", "select", "gradient", options=["gradient", "pulse"],
+                    help="gradient ramps across the letters; pulse animates "
+                         "(this panel does not decode APNG)"),
+              Param("layout", "select", "column", options=["column", "row"]),
+              Param("from", "color", "white", options="@colors",
+                    help="Colour each name starts at"),
+              Param("font", "select", "5x7", options="@fonts"),
+              Param("scale", "number", None, minimum=1, maximum=4),
+              Param("stagger", "number", 0, minimum=0, maximum=1,
+                    help="pulse mode: offset items so they take turns"),
+              Param("floor", "number", 0, minimum=0, maximum=1),
+              Param("frames", "number", 30, minimum=2, maximum=120),
+              Param("duration", "number", 70, minimum=20, maximum=1000),
+              Param("background", "color", "black", options="@colors"),
+          ])
 def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
     items = parse_items(params.get("items", DEFAULT_ITEMS))
     if not items:
