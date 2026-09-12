@@ -12,7 +12,7 @@ what the day looks like.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..canvas import Canvas
@@ -81,13 +81,23 @@ def plan(days: list[tuple[date, list]], columns: int,
 
 
 def _events(ctx: RenderContext, params: dict[str, Any]):
-    days = int(params.get("lookahead_days", 14))
+    window = int(params.get("lookahead_days", 14))
     if ctx.calendars:
-        return ctx.calendars.upcoming(ctx.now, names=params.get("calendar"),
-                                      lookahead_days=days)
-    if ctx.calendar is not None:
-        return ctx.calendar.upcoming(ctx.now, lookahead_days=days)
-    return []
+        events = ctx.calendars.upcoming(ctx.now, names=params.get("calendar"),
+                                        lookahead_days=window)
+    elif ctx.calendar is not None:
+        events = ctx.calendar.upcoming(ctx.now, lookahead_days=window)
+    else:
+        return []
+
+    # `from_days` skips whole calendar days rather than whole event-groups.
+    # Skipping groups would be unpredictable: a single busy day can fill every
+    # column, so "skip 3 days of events" could silently skip past a week.
+    skip = int(params.get("from_days", 0))
+    if skip > 0:
+        first = ctx.today + timedelta(days=skip)
+        events = [e for e in events if e.start.date() >= first]
+    return events
 
 
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
@@ -104,6 +114,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="How many distinct days to consider"),
               Param("hour24", "bool", False),
               Param("accent", "color", "amber", options="@colors"),
+              Param("from_days", "number", 0, minimum=0, maximum=30,
+                    help="Start this many days ahead. 0 is today; 3 skips the "
+                         "near term a companion panel already covers."),
               Param("lookahead_days", "number", 14, minimum=1, maximum=90),
           ])
 def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -118,7 +131,10 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 
     events = _events(ctx, params)
     if not events:
-        c.centered("nothing scheduled", "dim", small)
+        skip = int(params.get("from_days", 0))
+        message = (f"nothing after {skip} days" if skip else "nothing scheduled")
+        c.centered(str(params.get("empty", message)), "dim", small,
+                   max_width=c.width - 4)
         return c
 
     days = group_by_day(events)[:max(1, int(params.get("days", 3)))]

@@ -156,3 +156,41 @@ def test_ampersands_survive(app):
     assert "&" in FONT_3X5.source
     c = render(app, [ev(0, 17, 30, "Health & Wealth")])
     assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 80
+
+
+# --- looking further ahead --------------------------------------------------
+
+def test_from_days_skips_the_near_term(app):
+    events = [ev(0, 9, 0, "Today thing"), ev(1, 9, 0, "Tomorrow thing"),
+              ev(4, 9, 0, "Next week thing")]
+    near = render(app, events)
+    far = render(app, events, {"from_days": 3})
+    assert near.to_ascii() != far.to_ascii()
+
+
+def test_from_days_counts_calendar_days_not_event_groups(app):
+    """Skipping groups would be unpredictable: one busy day can fill every
+    column, so 'skip 3 days of events' could silently skip a week."""
+    from glance.scenes.columns import _events
+
+    class Ctx:
+        pass
+
+    events = [ev(0, h, 0, f"t{h}") for h in range(6, 18)] + [ev(3, 9, 0, "later")]
+    ctx = app.context(NOW)
+    ctx.calendars = FakeCalendars(events)
+    ctx.calendar = None
+    kept = _events(ctx, {"from_days": 3})
+    assert [e.summary for e in kept] == ["later"]
+
+
+def test_zero_from_days_changes_nothing(app):
+    events = [ev(0, 9, 0, "a"), ev(2, 9, 0, "b")]
+    assert render(app, events).to_ascii() == render(app, events, {"from_days": 0}).to_ascii()
+
+
+def test_an_empty_far_view_says_why(app):
+    """'nothing scheduled' would read as a broken feed when the near term is
+    simply being skipped."""
+    c = render(app, [ev(0, 9, 0, "only today")], {"from_days": 3})
+    assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 0

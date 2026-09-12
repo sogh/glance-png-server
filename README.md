@@ -677,6 +677,13 @@ columns, which is the right thing to show when that is what the day looks
 like. A continuation column repeats the day label dimmed, so the eye does not
 read it as a new day.
 
+`from_days` shifts the window, which lets two slots cover six days between
+them: one at `from_days: 0` showing today onward, another at `from_days: 3`
+picking up where it leaves off. It skips whole *calendar* days rather than
+whole event-groups — skipping groups would be unpredictable, since one busy
+day can fill every column and "skip 3 days of events" could silently jump a
+week.
+
 **The budget:** 4 events per column, 12 in total, with roughly 10 characters
 of title each. Times drop their minutes on the hour — `9a` rather than `9:00a`
 — which buys ten pixels of title on half the rows, and a 64px column has none
