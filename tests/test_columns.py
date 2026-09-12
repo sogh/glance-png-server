@@ -255,3 +255,61 @@ def test_skipping_past_everything_says_so_rather_than_drawing_blank(app):
 def test_zero_skip_is_unchanged(app):
     assert (render(app, week()).to_ascii()
             == render(app, week(), {"skip_columns": 0}).to_ascii())
+
+
+# --- conditional word wrap --------------------------------------------------
+
+def test_spare_rows_go_to_titles_that_want_them():
+    from glance.scenes.columns import allocate_rows
+    assert allocate_rows([2, 2]) == [2, 2]
+    assert allocate_rows([3, 1]) == [3, 1]
+    assert allocate_rows([4]) == [4]
+
+
+def test_a_full_column_never_wraps():
+    """Wrapping must never cost an event its slot."""
+    from glance.scenes.columns import allocate_rows
+    assert allocate_rows([2, 2, 2, 2]) == [1, 1, 1, 1]
+    assert allocate_rows([4, 1, 1, 1]) == [1, 1, 1, 1]
+
+
+def test_partial_spare_is_shared_most_starved_first():
+    from glance.scenes.columns import allocate_rows
+    assert sum(allocate_rows([2, 2, 1])) == 4
+    assert allocate_rows([3, 2, 1]) == [2, 1, 1]
+
+
+def test_allocation_never_exceeds_the_column():
+    from glance.scenes.columns import allocate_rows
+    for needs in ([1], [9], [3, 3], [2, 2, 2], [5, 5, 5, 5]):
+        assert sum(allocate_rows(needs)) <= 4
+
+
+def test_a_long_title_uses_a_second_row_when_alone(app):
+    long_title = "Meggie gets scanned at the vet"
+    wrapped = render(app, [ev(0, 11, 15, long_title)])
+    flat = render(app, [ev(0, 11, 15, long_title)], {"wrap": False})
+    lit = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
+    assert lit(wrapped) > lit(flat), "more of the title should be visible"
+
+
+def test_a_busy_column_looks_the_same_either_way(app):
+    """With four events there is no spare row, so wrap changes nothing."""
+    busy = [ev(0, 6 + i, 0, f"A fairly long event title {i}") for i in range(4)]
+    assert render(app, busy).to_ascii() == render(app, busy, {"wrap": False}).to_ascii()
+
+
+def test_wrapping_still_respects_the_panel_edge(app):
+    c = render(app, [ev(0, 9, 0, "An extremely long event title that runs on and on")])
+    edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
+    assert all(sum(p) == 0 for p in edge)
+
+
+def test_wrapped_rows_stay_inside_the_column(app):
+    """A second line must not bleed into the neighbouring column."""
+    events = [ev(0, 9, 0, "A very long title indeed that wraps"),
+              ev(1, 9, 0, "Tomorrow")]
+    c = render(app, events)
+    # The divider column between panel 1 and 2 is at x = 63.
+    for y in range(7, 32):
+        assert sum(c.image.getpixel((62, y))) == 0, f"bled into the divider at row {y}"

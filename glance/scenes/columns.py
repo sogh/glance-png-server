@@ -22,9 +22,30 @@ from .agenda import day_label
 from .base import Param, RenderContext, register
 
 ROWS_PER_COLUMN = 4
-ROW_Y = (7, 13, 19, 25)
+FIRST_ROW_Y = 7
+ROW_STEP = 6
 HEADER_Y = 0
 RULE_Y = 5
+
+
+def allocate_rows(needs: list[int], total: int = ROWS_PER_COLUMN) -> list[int]:
+    """Hand out spare rows to the titles that want them.
+
+    Every event gets one row. Whatever is left over goes to events whose
+    titles are still truncated, most-starved first — but only what is spare,
+    so wrapping can never push an event off the column. A column of four
+    events wraps nothing; a column of two can give both a second line.
+    """
+    lines = [1] * len(needs)
+    spare = total - len(needs)
+    while spare > 0:
+        hungry = [i for i, want in enumerate(needs) if lines[i] < want]
+        if not hungry:
+            break
+        pick = max(hungry, key=lambda i: needs[i] - lines[i])
+        lines[pick] += 1
+        spare -= 1
+    return lines
 
 
 def compact_time(when: datetime, all_day: bool, hour24: bool = False) -> str:
@@ -116,6 +137,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("days", "number", None, minimum=1, maximum=12,
                     help="Distinct days to consider; defaults to the column count"),
               Param("hour24", "bool", False),
+              Param("wrap", "bool", True,
+                    help="Let a long title use a second row, but only when "
+                         "no event would be pushed off the column"),
               Param("accent", "color", "amber", options="@colors"),
               Param("from_days", "number", 0, minimum=0, maximum=30,
                     help="Start this many days ahead. 0 is today; 3 skips the "
@@ -131,6 +155,7 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 
     count = max(1, int(params.get("columns", 3)))
     width = c.width // count
+    wrap = bool(params.get("wrap", True))
 
     # Skipping *columns* rather than days is what makes two panels continuous:
     # one shows columns 1-3 and the other 4-6, so they never overlap and never
@@ -183,18 +208,42 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         badge_w = small.measure(badge) + 3 if badge else 0
 
         shown = column["events"][:ROWS_PER_COLUMN]
-        for row, event in enumerate(shown):
-            y = ROW_Y[row]
-            stamp = compact_time(event.start, event.all_day, hour24)
+
+        # Work out each title's width first: the wrap budget depends on how
+        # wide its own time stamp is.
+        stamps = [compact_time(e.start, e.all_day, hour24) for e in shown]
+        title_xs = [x + 1 + small.measure(st) + 3 for st in stamps]
+        budgets = [x + width - tx - 2 for tx in title_xs]
+
+        if wrap:
+            needs = [len(small.wrap(e.summary, budgets[i])) for i, e in enumerate(shown)]
+        else:
+            needs = [1] * len(shown)
+        allowance = allocate_rows(needs)
+
+        row = 0
+        for index, event in enumerate(shown):
+            y = FIRST_ROW_Y + row * ROW_STEP
             colour = "green" if event.is_now(ctx.now) else (event.style.color or accent)
-            c.text(x + 1, y, stamp, colour, small)
-            title_x = x + 1 + small.measure(stamp) + 3
-            reserve = badge_w if (badge and row == len(shown) - 1) else 0
-            c.text(title_x, y, event.summary,
-                   dim("white", 0.55) if event.style.dim else "white",
-                   small, max_width=x + width - title_x - 2 - reserve)
+            c.text(x + 1, y, stamps[index], colour, small)
+
+            # The badge shares the final row, so its width comes out of that
+            # title's budget rather than being drawn over it.
+            last_row = row + allowance[index] - 1
+            budget = budgets[index]
+            lines = (small.wrap(event.summary, budget)[:allowance[index]]
+                     if allowance[index] > 1 else
+                     [small.truncate(event.summary, budget)])
+
+            title_colour = dim("white", 0.55) if event.style.dim else "white"
+            for offset, line in enumerate(lines):
+                reserve = badge_w if (badge and row + offset == ROWS_PER_COLUMN - 1) else 0
+                c.text(title_xs[index], y + offset * ROW_STEP, line,
+                       title_colour, small, max_width=budget - reserve)
+            row += allowance[index]
 
         if badge:
             # Say how many did not fit rather than silently dropping the day.
-            c.text(x + width - 2, ROW_Y[-1], badge, dim(accent, 0.75), small, "right")
+            c.text(x + width - 2, FIRST_ROW_Y + (ROWS_PER_COLUMN - 1) * ROW_STEP,
+                   badge, dim(accent, 0.75), small, "right")
     return c

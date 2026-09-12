@@ -15,6 +15,14 @@ endpoint.
 
 ---
 
+## Documentation
+
+- **[docs/DEVICE.md](docs/DEVICE.md)** — what the Glance Scroll actually does,
+  including the undocumented behaviour found by experiment
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — code map and the
+  reasoning behind the non-obvious decisions
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — packaging plan and open items
+
 ## What the device actually requires
 
 From the [Glance developer docs](https://glance-led.dev/docs/private-apps/):
@@ -716,8 +724,14 @@ boundary simply continues into the second panel rather than restarting.
 `from_days` is also there if you want a fixed "next week" window instead; it
 skips whole calendar days.
 
+**Titles wrap, but only into space nobody else wants.** Every event gets one
+row; leftover rows go to titles that are still truncated, most-starved first.
+So a column holding two events can give both a second line, a column holding
+one can give it all four — and a full column of four wraps nothing, because
+wrapping must never cost an event its slot. `wrap: false` turns it off.
+
 **The budget:** 4 events per column, 12 in total, with roughly 10 characters
-of title each. Times drop their minutes on the hour — `9a` rather than `9:00a`
+of title each — or two to four times that when a column has room to wrap. Times drop their minutes on the hour — `9a` rather than `9:00a`
 — which buys ten pixels of title on half the rows, and a 64px column has none
 to spare. Anything that still does not fit is counted in a `+N` badge rather
 than silently dropped.
