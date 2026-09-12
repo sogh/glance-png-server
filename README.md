@@ -270,6 +270,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `todos` | Same scene, older name | anything is undone |
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
 | `weather` | Current conditions, high and low | coordinates are set |
+| `instagram` | Follower and post counts | a Graph API token is set |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -610,6 +611,48 @@ pixel by pixel.
 
 As with the calendar, a failed fetch serves the cached reading: a slightly
 stale temperature beats a blank panel.
+
+### Instagram counts
+
+**Scraping does not work, and that is why the counts you see elsewhere are
+wrong.** An unauthenticated request for a public profile returns a login wall
+or `{"require_login": true}` — *intermittently*, not consistently. An app built
+on it does not fail loudly; it falls back to a stale or zero value and
+presents it as current.
+
+So this uses the official Graph API, and when it cannot get a fresh number it
+**says so rather than guessing**. A count openly labelled six hours old is more
+useful than one that might be wrong and looks current. With no cached value at
+all it explains itself instead of drawing a zero — zero followers is a number,
+and showing it would be a lie.
+
+```yaml
+sources:
+  instagram:
+    access_token: "${GLANCE_IG_TOKEN:-}"
+    account: ""          # blank = the token's own account
+    refresh: 3600
+```
+
+Setup, once:
+
+1. The account must be **Business or Creator**, linked to a Facebook Page
+   (Instagram app → Settings → Account type)
+2. [developers.facebook.com](https://developers.facebook.com) → create an app →
+   add **Instagram Graph API**
+3. Graph API Explorer → select the app and Page → request `instagram_basic`
+   and `pages_show_list` → generate a token
+4. Exchange it for a long-lived token (60 days) or create a **System User**
+   token, which does not expire
+5. `GLANCE_IG_TOKEN=...` in `.env`
+
+Leave `account` blank for the token's own account — exact, and the simplest
+thing that works. Set it to another public Business or Creator handle to use
+`business_discovery` instead; that only works against Business/Creator
+accounts, not personal ones.
+
+The age appears top-right in amber once the figure passes `stale_after`
+(default 6 hours). A silent panel means the number is current.
 
 ### Reminders without a calendar
 

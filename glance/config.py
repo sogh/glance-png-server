@@ -71,6 +71,7 @@ class Settings:
     ics_url: str = ""                          # legacy single-calendar form
     calendars: dict[str, Any] = field(default_factory=dict)
     weather: dict[str, Any] = field(default_factory=dict)
+    instagram: dict[str, Any] = field(default_factory=dict)
     ics_refresh: int = 900
     ics_lookahead_days: int = 14
     channels: dict[str, list[ChannelEntry]] = field(default_factory=dict)
@@ -144,6 +145,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         ics_refresh=int(src.get("refresh", cal.get("refresh", 900))),
         calendars=dict(src.get("calendars", {}) or {}),
         weather=dict(src.get("weather", {}) or {}),
+        instagram=dict(src.get("instagram", {}) or {}),
         ics_lookahead_days=int(src.get("lookahead_days", cal.get("lookahead_days", 14))),
         raw=raw,
     )

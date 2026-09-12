@@ -112,6 +112,31 @@ sources:
     refresh: 900
     air_quality: true         # a second call, to a different Open-Meteo host
 
+  # Instagram follower and post counts, via the official Graph API.
+  #
+  # Scraping the public profile does not work -- unauthenticated requests get
+  # a login wall or a 401, intermittently. An app built that way falls back to
+  # a stale or zero value and shows it as fact, which is why the counts you
+  # have seen elsewhere are often wrong.
+  #
+  # Setup (once):
+  #   1. The account must be a Business or Creator account, linked to a
+  #      Facebook Page. Instagram app -> Settings -> Account type.
+  #   2. developers.facebook.com -> create an app -> add "Instagram Graph API"
+  #   3. Graph API Explorer: pick the app and Page, request the permissions
+  #      instagram_basic and pages_show_list, generate a token
+  #   4. Exchange it for a long-lived token (60 days) or make a System User
+  #      token, which does not expire
+  #   5. Put it in .env as GLANCE_IG_TOKEN
+  #
+  # Leave `account` blank to report the token's own account, which is exact
+  # and the simplest thing that works. Set it to another public Business or
+  # Creator handle to use business_discovery instead.
+  instagram:
+    access_token: "${GLANCE_IG_TOKEN:-}"
+    account: ""               # blank = the token's own account
+    refresh: 3600             # counts move slowly; hourly is plenty
+
   refresh: 900              # seconds between calendar fetches
   lookahead_days: 14
 

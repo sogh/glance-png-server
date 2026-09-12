@@ -23,6 +23,7 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.instagram import InstagramSource
 from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
 
@@ -46,6 +47,7 @@ class GlanceApp:
         self.calendar: CalendarSource | None = self.calendars.get("default") or first
         self.brightness = brightness_mod.Brightness.from_config(settings.brightness)
         self.weather = self._build_weather(settings)
+        self.instagram = self._build_instagram(settings)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -71,6 +73,17 @@ class GlanceApp:
         )
         source.air_quality = bool(spec.get("air_quality", True))
         return source
+
+    @staticmethod
+    def _build_instagram(settings: Settings) -> InstagramSource:
+        spec = settings.instagram or {}
+        return InstagramSource(
+            token=str(spec.get("access_token", "") or ""),
+            account=str(spec.get("account", "") or ""),
+            user_id=str(spec.get("user_id", "me") or "me"),
+            cache_dir=settings.cache_dir,
+            refresh=int(spec.get("refresh", 3600)),
+        )
 
     @classmethod
     def from_config(cls, path: str | Path | None = None) -> "GlanceApp":
@@ -120,10 +133,13 @@ class GlanceApp:
 
             calendars_changed = fresh.calendars != self.settings.calendars
             weather_changed = fresh.weather != self.settings.weather
+            instagram_changed = fresh.instagram != self.settings.instagram
             self.settings = fresh
             self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
             if weather_changed:
                 self.weather = self._build_weather(fresh)
+            if instagram_changed:
+                self.instagram = self._build_instagram(fresh)
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
@@ -229,6 +245,7 @@ class GlanceApp:
             calendar=self.calendar,
             calendars=self.calendars,
             weather=self.weather,
+            instagram=self.instagram,
             todos=self.todos,
             holidays=self.holidays,
         )
@@ -323,6 +340,11 @@ class GlanceApp:
                 "weather": {
                     "configured": self.weather.configured,
                     "last_error": self.weather.last_error,
+                },
+                "instagram": {
+                    "configured": self.instagram.configured,
+                    "account": self.instagram.account or "me",
+                    "last_error": self.instagram.last_error,
                 },
                 "todos": {
                     "path": str(self.settings.todos_file),
