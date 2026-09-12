@@ -110,6 +110,7 @@ sources:
     longitude: "${GLANCE_LON:-}"
     units: fahrenheit         # or celsius
     refresh: 900
+    air_quality: true         # a second call, to a different Open-Meteo host
 
   refresh: 900              # seconds between calendar fetches
   lookahead_days: 14

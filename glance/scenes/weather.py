@@ -35,7 +35,11 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("color", "color", "white", options="@colors",
                     help="Only used for mild temperatures; hot and cold pick their own"),
               Param("accent", "color", "amber", options="@colors"),
-              Param("feels", "bool", True, help="Show 'feels like' when it differs"),
+              Param("precip", "bool", True,
+                    help="Chance of rain today, or the amount if it is falling now"),
+              Param("aqi", "bool", True,
+                    help="US AQI, coloured by band: green good, red unhealthy"),
+              Param("feels", "bool", False, help="Show 'feels like' when it differs"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -75,7 +79,28 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
            small, max_width=room)
     c.text(detail_x, 13, f"H {current.high:.0f}  L {current.low:.0f}",
            "grey", small, max_width=room)
-    if bool(params.get("feels", True)) and abs(current.feels_like - current.temperature) >= 2:
-        c.text(detail_x, 22, f"FEELS {current.feels_like:.0f}",
-               dim("grey", 0.8), small, max_width=room)
+
+    # Third line packs in whatever fits, left to right, dropping anything that
+    # would overflow rather than truncating it into nonsense.
+    segments: list[tuple[str, Any]] = []
+    if bool(params.get("precip", True)) and current.precip_text:
+        segments.append((current.precip_text, "sky"))
+    if bool(params.get("aqi", True)) and current.aqi is not None:
+        # The number carries the colour: an AQI means nothing unless you
+        # already know the bands, and the colour is the band.
+        segments.append(("AQI", dim("grey", 0.9)))
+        segments.append((f"{current.aqi:.0f}", current.aqi_band[1]))
+    if (bool(params.get("feels", False))
+            and abs(current.feels_like - current.temperature) >= 2):
+        segments.append((f"FEELS {current.feels_like:.0f}", dim("grey", 0.8)))
+
+    x = detail_x
+    for index, (text, color) in enumerate(segments):
+        gap = 0 if index and segments[index - 1][0] == "AQI" else 4
+        width = small.measure(text)
+        if x + gap + width > c.width - 1:
+            break
+        x += gap if index else 0
+        c.text(x, 22, text, color, small)
+        x += width
     return c

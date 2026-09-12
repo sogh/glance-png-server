@@ -18,6 +18,30 @@ from pathlib import Path
 import httpx
 
 ENDPOINT = "https://api.open-meteo.com/v1/forecast"
+# Air quality lives on a different host and updates hourly rather than every
+# 15 minutes, so it is fetched and cached separately.
+AIR_ENDPOINT = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
+# US AQI bands. The colour carries the meaning here -- a number alone tells
+# you nothing unless you already know the scale.
+AQI_BANDS = [
+    (50, "GOOD", "green"),
+    (100, "MODERATE", "yellow"),
+    (150, "SENSITIVE", "orange"),
+    (200, "UNHEALTHY", "red"),
+    (300, "VERY BAD", "purple"),
+    (10_000, "HAZARDOUS", "crimson"),
+]
+
+
+def aqi_band(value: float | None) -> tuple[str, str]:
+    """Label and colour for a US AQI reading."""
+    if value is None:
+        return "", "grey"
+    for ceiling, label, color in AQI_BANDS:
+        if value <= ceiling:
+            return label, color
+    return "HAZARDOUS", "crimson"
 
 # WMO weather interpretation codes, collapsed to the handful of conditions
 # worth drawing differently at 20 pixels across.
@@ -49,10 +73,27 @@ class Weather:
     condition: str
     is_day: bool
     unit: str = "F"
+    precip_chance: int | None = None      # today's max probability, percent
+    precip_now: float = 0.0               # falling right now, inches
+    aqi: int | None = None                # US AQI
 
     @property
     def label(self) -> str:
         return LABELS.get(self.condition, self.condition.upper())
+
+    @property
+    def aqi_band(self) -> tuple[str, str]:
+        return aqi_band(self.aqi)
+
+    @property
+    def precip_text(self) -> str:
+        """What is actually falling beats what might: if it is raining now,
+        show the amount rather than a probability that has been overtaken."""
+        if self.precip_now > 0:
+            return f"{self.precip_now:.2f}IN".lstrip("0")
+        if self.precip_chance is not None:
+            return f"{self.precip_chance:.0f}%"
+        return ""
 
 
 class WeatherSource:
@@ -67,6 +108,8 @@ class WeatherSource:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_file = self.cache_dir / "weather.json"
+        self.air_cache_file = self.cache_dir / "air-quality.json"
+        self.air_quality = True
         self.last_error: str | None = None
         self._lock = threading.Lock()
 
@@ -92,9 +135,12 @@ class WeatherSource:
                 resp = httpx.get(ENDPOINT, timeout=self.timeout, params={
                     "latitude": self.latitude,
                     "longitude": self.longitude,
-                    "current": "temperature_2m,apparent_temperature,weather_code,is_day",
-                    "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+                    "current": "temperature_2m,apparent_temperature,weather_code,"
+                               "is_day,precipitation",
+                    "daily": "temperature_2m_max,temperature_2m_min,weather_code,"
+                             "precipitation_probability_max",
                     "temperature_unit": self.units,
+                    "precipitation_unit": "inch",
                     "timezone": "auto",
                     "forecast_days": 1,
                 })
@@ -114,6 +160,32 @@ class WeatherSource:
                         return None
                 return None
 
+    def _air(self) -> dict | None:
+        """Air quality, cached separately. A failure here is not fatal -- the
+        panel simply omits the AQI rather than losing the whole forecast."""
+        if not (self.configured and self.air_quality):
+            return None
+        try:
+            age = (time.time() - self.air_cache_file.stat().st_mtime
+                   if self.air_cache_file.exists() else float("inf"))
+            if age < self.refresh:
+                return json.loads(self.air_cache_file.read_text())
+            resp = httpx.get(AIR_ENDPOINT, timeout=self.timeout, params={
+                "latitude": self.latitude, "longitude": self.longitude,
+                "current": "us_aqi,pm2_5", "timezone": "auto",
+            })
+            resp.raise_for_status()
+            data = resp.json()
+            self.air_cache_file.write_text(json.dumps(data))
+            return data
+        except Exception:  # noqa: BLE001
+            if self.air_cache_file.exists():
+                try:
+                    return json.loads(self.air_cache_file.read_text())
+                except (json.JSONDecodeError, OSError):
+                    return None
+            return None
+
     def current(self) -> Weather | None:
         data = self._payload()
         if not data:
@@ -121,6 +193,11 @@ class WeatherSource:
         try:
             cur = data["current"]
             daily = data.get("daily", {})
+
+            air = self._air() or {}
+            aqi_raw = (air.get("current") or {}).get("us_aqi")
+            chance = (daily.get("precipitation_probability_max") or [None])[0]
+
             return Weather(
                 temperature=round(float(cur["temperature_2m"])),
                 feels_like=round(float(cur.get("apparent_temperature", cur["temperature_2m"]))),
@@ -129,6 +206,9 @@ class WeatherSource:
                 condition=WMO.get(int(cur.get("weather_code", 0)), "cloudy"),
                 is_day=bool(cur.get("is_day", 1)),
                 unit="C" if self.units.startswith("c") else "F",
+                precip_chance=None if chance is None else round(float(chance)),
+                precip_now=float(cur.get("precipitation", 0) or 0),
+                aqi=None if aqi_raw is None else round(float(aqi_raw)),
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             self.last_error = f"unexpected payload: {exc}"

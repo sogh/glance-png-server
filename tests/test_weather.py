@@ -122,8 +122,9 @@ def test_night_differs_from_day(app):
 
 
 def test_feels_like_is_hidden_when_it_matches(app):
-    same = render(app, Weather(60, 60, 70, 50, "cloudy", True))
-    different = render(app, Weather(60, 48, 70, 50, "cloudy", True))
+    """`feels` is off by default now that precip and AQI earn that slot."""
+    same = render(app, Weather(60, 60, 70, 50, "cloudy", True), {"feels": True})
+    different = render(app, Weather(60, 48, 70, 50, "cloudy", True), {"feels": True})
     lit = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
     assert lit(different) > lit(same)
 
@@ -153,3 +154,86 @@ def test_it_fits_a_single_module(app):
     assert c.width == 64
     edge = [c.image.getpixel((63, y)) for y in range(32)]
     assert all(sum(p) == 0 for p in edge)
+
+
+# --- precipitation and air quality -----------------------------------------
+
+def test_aqi_bands_match_the_us_scale():
+    from glance.sources.weather import aqi_band
+    assert aqi_band(20)[0] == "GOOD"
+    assert aqi_band(50)[0] == "GOOD"          # boundary belongs to the lower band
+    assert aqi_band(51)[0] == "MODERATE"
+    assert aqi_band(120)[0] == "SENSITIVE"
+    assert aqi_band(180)[0] == "UNHEALTHY"
+    assert aqi_band(250)[0] == "VERY BAD"
+    assert aqi_band(500)[0] == "HAZARDOUS"
+    assert aqi_band(None)[0] == ""
+
+
+def test_aqi_colours_run_from_green_to_red():
+    from glance.sources.weather import aqi_band
+    assert aqi_band(20)[1] == "green"
+    assert aqi_band(180)[1] == "red"
+
+
+def test_falling_rain_beats_a_forecast_probability():
+    """A 20% chance is not interesting while it is actually raining."""
+    raining = Weather(60, 60, 70, 50, "rain", True, precip_chance=20, precip_now=0.04)
+    dry = Weather(60, 60, 70, 50, "cloudy", True, precip_chance=20, precip_now=0.0)
+    assert raining.precip_text.endswith("IN")
+    assert dry.precip_text == "20%"
+
+
+def test_no_precipitation_data_shows_nothing():
+    assert Weather(60, 60, 70, 50, "clear", True).precip_text == ""
+
+
+def test_the_scene_draws_precip_and_aqi(app):
+    plain = render(app, Weather(60, 60, 70, 50, "cloudy", True))
+    rich = render(app, Weather(60, 60, 70, 50, "cloudy", True,
+                               precip_chance=40, aqi=68))
+    lit = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
+    assert lit(rich) > lit(plain)
+
+
+def test_a_bad_aqi_reads_red(app):
+    c = render(app, Weather(60, 60, 70, 50, "cloudy", True, aqi=180))
+    reds = [p for p in c.image.get_flattened_data() if p[0] > 180 and p[1] < 90 and p[2] < 90]
+    assert reds, "an unhealthy AQI should be unmistakable"
+
+
+def test_a_good_aqi_reads_green(app):
+    c = render(app, Weather(60, 60, 70, 50, "cloudy", True, aqi=20))
+    greens = [p for p in c.image.get_flattened_data() if p[1] > 150 and p[0] < 100]
+    assert greens
+
+
+def test_both_can_be_switched_off(app):
+    on = render(app, Weather(60, 60, 70, 50, "cloudy", True, precip_chance=40, aqi=68))
+    off = render(app, Weather(60, 60, 70, 50, "cloudy", True, precip_chance=40, aqi=68),
+                 {"precip": False, "aqi": False})
+    assert on.to_ascii() != off.to_ascii()
+
+
+def test_the_extra_line_never_overflows(app):
+    """Worst case: three-digit AQI, an amount falling, and feels-like."""
+    c = render(app, Weather(-12, -20, 104, -18, "snow", True,
+                            precip_chance=100, precip_now=1.25, aqi=487),
+               {"feels": True})
+    edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
+    assert all(sum(p) == 0 for p in edge)
+
+
+def test_air_quality_failing_does_not_lose_the_forecast(primed, tmp_path):
+    """A second endpoint is a second thing that can break; it must not take
+    the temperature down with it."""
+    primed.air_quality = True
+    object.__setattr__(primed, "timeout", 0.001)
+    w = primed.current()
+    assert w is not None and w.temperature == 66
+    assert w.aqi is None
+
+
+def test_air_quality_can_be_disabled(primed):
+    primed.air_quality = False
+    assert primed._air() is None

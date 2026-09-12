@@ -140,3 +140,18 @@ def test_fit_downscales_oversized_art_without_distorting_it():
     # 6:1 source into a 6:1 slot -- should fill the full width.
     assert c.image.getpixel((0, 16)) == (255, 0, 0)
     assert c.image.getpixel((191, 16)) == (255, 0, 0)
+
+
+@pytest.mark.parametrize("font", [FONT_5X7, FONT_3X5], ids=["5x7", "3x5"])
+def test_fonts_cover_what_the_scenes_actually_draw(font):
+    """A missing glyph does not fail loudly, it renders '?' -- which is how
+    "13%" reached the panel as "13?"."""
+    used = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ %°.:,-/'!"
+    missing = [c for c in used if c not in font.source]
+    assert not missing, f"{font.name} cannot draw {missing}"
+
+
+def test_the_percent_sign_is_not_a_question_mark():
+    assert FONT_3X5.mask("%").getbbox() != FONT_3X5.mask("?").getbbox() or \
+        FONT_3X5.measure("%") > 0
+    assert "%" in FONT_3X5.source

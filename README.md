@@ -587,7 +587,15 @@ Right-click your house in Google Maps to get the coordinates. With none set
 the scene drops out of rotation rather than showing an empty box.
 
 The temperature is coloured by value — orange above 75, blue below 45 — so it
-reads from across a room before you have focused on the digits. Icons are
+reads from across a room before you have focused on the digits. The third line
+carries the chance of rain today (or the amount, if it is actually falling)
+and the **US AQI coloured by band** — green good, yellow moderate, orange,
+red, purple, crimson. The colour is the point: a bare AQI number means nothing
+unless you already know the scale.
+
+Air quality is a second call to a different Open-Meteo host, cached
+separately; set `air_quality: false` to skip it. If that call fails the
+forecast is unaffected — the panel simply omits the AQI. Icons are
 drawn from primitives in `glance/weathericons.py` (clear, partly, cloudy, fog,
 drizzle, rain, snow, thunder, plus a crescent moon at night), because circles
 and clouds are far easier to describe as overlapping discs than to type out
