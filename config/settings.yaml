@@ -137,6 +137,16 @@ sources:
     account: ""               # blank = the token's own account
     refresh: 3600             # counts move slowly; hourly is plenty
 
+  # Baseball, from MLB's own public Stats API. No key, no account.
+  #
+  # `teams` takes abbreviations: SEA, LAD, NYY, BOS... Several are allowed.
+  # The panel shows the last result and the next fixture together, and hands
+  # the whole strip to a game that is actually in progress.
+  baseball:
+    teams: "SEA"
+    refresh: 600              # seconds between checks
+    live_refresh: 60          # poll harder while a game is being played
+
   refresh: 900              # seconds between calendar fetches
   lookahead_days: 14
 

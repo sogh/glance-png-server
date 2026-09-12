@@ -23,6 +23,7 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.baseball import BaseballSource
 from .sources.instagram import InstagramSource
 from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
@@ -48,6 +49,7 @@ class GlanceApp:
         self.brightness = brightness_mod.Brightness.from_config(settings.brightness)
         self.weather = self._build_weather(settings)
         self.instagram = self._build_instagram(settings)
+        self.baseball = self._build_baseball(settings)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -83,6 +85,17 @@ class GlanceApp:
             user_id=str(spec.get("user_id", "me") or "me"),
             cache_dir=settings.cache_dir,
             refresh=int(spec.get("refresh", 3600)),
+        )
+
+    @staticmethod
+    def _build_baseball(settings: Settings) -> BaseballSource:
+        spec = settings.baseball or {}
+        return BaseballSource(
+            teams=str(spec.get("teams", "") or ""),
+            tz=settings.tz,
+            cache_dir=settings.cache_dir,
+            refresh=int(spec.get("refresh", 600)),
+            live_refresh=int(spec.get("live_refresh", 60)),
         )
 
     @classmethod
@@ -134,12 +147,15 @@ class GlanceApp:
             calendars_changed = fresh.calendars != self.settings.calendars
             weather_changed = fresh.weather != self.settings.weather
             instagram_changed = fresh.instagram != self.settings.instagram
+            baseball_before = self.settings.baseball
             self.settings = fresh
             self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
             if weather_changed:
                 self.weather = self._build_weather(fresh)
             if instagram_changed:
                 self.instagram = self._build_instagram(fresh)
+            if fresh.baseball != baseball_before:
+                self.baseball = self._build_baseball(fresh)
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
@@ -246,6 +262,7 @@ class GlanceApp:
             calendars=self.calendars,
             weather=self.weather,
             instagram=self.instagram,
+            baseball=self.baseball,
             todos=self.todos,
             holidays=self.holidays,
         )
@@ -340,6 +357,11 @@ class GlanceApp:
                 "weather": {
                     "configured": self.weather.configured,
                     "last_error": self.weather.last_error,
+                },
+                "baseball": {
+                    "configured": self.baseball.configured,
+                    "teams": self.baseball.teams,
+                    "last_error": self.baseball.last_error,
                 },
                 "instagram": {
                     "configured": self.instagram.configured,

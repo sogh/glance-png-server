@@ -272,6 +272,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `static:<name>` | A PNG from `assets/static/` | the file exists |
 | `weather` | Current conditions, high and low | coordinates are set |
 | `instagram` | Follower and post counts | a Graph API token is set |
+| `baseball` | Last result and next game, and where to watch | teams are configured |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -612,6 +613,34 @@ pixel by pixel.
 
 As with the calendar, a failed fetch serves the cached reading: a slightly
 stale temperature beats a blank panel.
+
+### Baseball
+
+MLB's own Stats API (`statsapi.mlb.com`) — **no key, no account**.
+
+```yaml
+sources:
+  baseball:
+    teams: "SEA"          # abbreviations, comma-separated
+    refresh: 600
+    live_refresh: 60      # poll harder while a game is being played
+```
+
+The panel shows **the last result and the next fixture together**, because a
+result stays interesting for a while after the final out and then the next
+game becomes the thing you want. A game actually in progress takes the whole
+strip instead — score large, inning, and where to watch.
+
+Two details that a naive scoreboard gets wrong:
+
+**The broadcast follows *your* team.** Every game lists feeds for both sides,
+so a Mariners fan watching a road game wants `Mariners.TV`, not the home
+network. Printing the first listing in the array is wrong half the time.
+
+**A score is only drawn once one exists.** MLB reports `0 - 0` for a game in
+`Pre-Game` state; rendering that makes a game that has not started look like a
+scoreless one in progress. Before first pitch the panel shows the matchup and
+the start time instead.
 
 ### Instagram counts
 
