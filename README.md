@@ -154,7 +154,8 @@ guarantees conflicts with the repo. Keeping edits in a separate file means:
 
 - your config stays readable and version-controlled
 - **reset to file** is just deleting a key
-- a deploy never clobbers what you changed from the UI (`data/` is excluded)
+- a deploy never clobbers what you changed from the UI (`data/overrides.json`
+  is excluded from the payload, along with rotation state and caches)
 - every override is visible in one small file you can read or delete
 
 A channel present in the overlay **replaces** that channel wholesale rather

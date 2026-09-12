@@ -93,10 +93,16 @@ EXCLUDES=(
   --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store'
   --exclude './logs/*' --exclude './preview-frames'
   --exclude './data/state.json' --exclude './data/cache'
+  # The overlay is what the /edit page writes. Shipping a laptop's copy over
+  # the server's silently discards every channel change made from the UI.
+  --exclude './data/overrides.json'
   --exclude './.env'
 )
 if [[ $WITH_DATA -eq 0 ]]; then
-  EXCLUDES+=(--exclude './data/todos.json')
+  # Both names: the file was renamed, and an exclusion that quietly stopped
+  # matching is how a laptop's copy started overwriting the server's on every
+  # single deploy.
+  EXCLUDES+=(--exclude './data/reminders.json' --exclude './data/todos.json')
 fi
 
 TARBALL="$(mktemp -t glance-deploy).tar.gz"

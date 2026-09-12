@@ -258,3 +258,24 @@ def test_the_editor_page_no_longer_ships_a_raw_json_box_for_params(client):
     html = client.get("/edit").text
     assert "catalogue" in html
     assert "params (json)" not in html
+
+
+def test_the_deploy_never_ships_the_overlay():
+    """A laptop's overrides.json overwriting the server's silently discards
+    every channel change made from the editor. It did, once."""
+    from pathlib import Path
+    script = Path(__file__).resolve().parent.parent / "deploy" / "pve-deploy.sh"
+    text = script.read_text()
+    assert "--exclude './data/overrides.json'" in text
+    assert "--exclude './data/state.json'" in text
+    assert "--exclude './data/cache'" in text
+
+
+def test_the_deploy_excludes_the_reminders_file_under_both_names():
+    """It was renamed from todos.json; an exclusion that stops matching is
+    indistinguishable from no exclusion at all."""
+    from pathlib import Path
+    script = Path(__file__).resolve().parent.parent / "deploy" / "pve-deploy.sh"
+    text = script.read_text()
+    assert "--exclude './data/reminders.json'" in text
+    assert "--exclude './data/todos.json'" in text
