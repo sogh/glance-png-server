@@ -271,3 +271,29 @@ def test_scenes_honour_the_width_override(app, now):
     for scene in ("date", "panels", "text"):
         c, _ = app.render_scene(scene, {"text": "HI"}, app.context(now, width=128))
         assert c.width == 128, scene
+
+
+def test_the_panel_test_card_is_vertically_centred(app, now):
+    """An off-centre test card looks exactly like the panel shifting the
+    image, which is the thing you are using it to rule out."""
+    c, _ = app.render_scene("panels", {}, app.context(now, brightness=1.0))
+    # Ignore the 1px frame; measure the content inside it.
+    inner = [y for y in range(1, 31)
+             if any(sum(c.image.getpixel((x, y))) > 0 for x in range(4, c.width - 4))]
+    above, below = min(inner) - 1, 30 - max(inner)
+    assert abs(above - below) <= 1, f"{above} rows above, {below} below"
+
+
+def test_the_alignment_card_marks_the_extreme_rows(app, now):
+    c, _ = app.render_scene("alignment", {}, app.context(now, brightness=1.0))
+    top = c.image.getpixel((c.width // 2, 0))
+    bottom = c.image.getpixel((c.width // 2, 31))
+    assert top[0] > 150 and top[2] < 90, "row 0 should be red"
+    assert bottom[2] > 150 and bottom[0] < 110, "row 31 should be blue"
+
+
+def test_the_alignment_card_fills_every_row_edge(app, now):
+    """The ruler has to reach both extremes or it cannot show a partial cut."""
+    c, _ = app.render_scene("alignment", {}, app.context(now, brightness=1.0))
+    for y in (0, 31):
+        assert sum(c.image.getpixel((0, y))) > 0, f"row {y} left edge unlit"

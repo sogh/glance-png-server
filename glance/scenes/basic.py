@@ -201,20 +201,53 @@ def render_panels(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     module = int(params.get("module", 64))
     colors = ["red", "green", "sky", "amber", "magenta", "mint"]
 
+    # Centre the block properly. An off-centre test card is worse than no test
+    # card: it looks exactly like the panel shifting the image, which is the
+    # thing you are using it to rule out.
+    big, small = get_font("5x7"), get_font("3x5")
+    block = big.height * 2 + 3 + small.height
+    top = (c.height - block) // 2
+
     count = max(1, -(-c.width // module))
     for i in range(count):
         x0 = i * module
         w = min(module, c.width - x0)
         color = colors[i % len(colors)]
         c.rect(x0, 0, w, c.height, color)
-        # Module number, as large as it will go.
-        c.text(x0 + w // 2, 8, str(i + 1), color, "5x7", "center", w - 6, scale=2)
-        c.text(x0 + w // 2, 24, f"{x0}-{x0 + w - 1}", dim(color, 0.8), "3x5",
-               "center", w - 4)
+        c.text(x0 + w // 2, top, str(i + 1), color, big, "center", w - 6, scale=2)
+        c.text(x0 + w // 2, top + big.height * 2 + 3, f"{x0}-{x0 + w - 1}",
+               dim(color, 0.8), small, "center", w - 4)
 
     # Corner pixels: if any is dark on the real panel, the image is being
     # cropped or scaled rather than shown 1:1.
     for x in (0, c.width - 1):
         for y in (0, c.height - 1):
             c.pixel(x, y, "hotwhite")
+    return c
+
+
+@register("alignment", description="Test card: are the top and bottom rows reaching the panel?",
+          params=[])
+def render_alignment(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
+    """Answers one question: is every row of the image actually displayed?
+
+    Row 0 is red and row 31 is blue, each two pixels deep. If you cannot see
+    the red, the top is being cut; if you cannot see the blue, the bottom is.
+    The side ruler ticks every four rows so a partial cut can be counted.
+    """
+    c = ctx.canvas()
+    c.clear("black")
+
+    c.fill_rect(0, 0, c.width, 2, "red")
+    c.fill_rect(0, c.height - 2, c.width, 2, "blue")
+
+    # Ruler on both edges: a tick every 4 rows, brighter every 8.
+    for y in range(0, c.height, 4):
+        shade = "white" if y % 8 == 0 else "dim"
+        c.fill_rect(0, y, 3 if y % 8 == 0 else 2, 1, shade)
+        c.fill_rect(c.width - (3 if y % 8 == 0 else 2), y, 3 if y % 8 == 0 else 2, 1, shade)
+
+    c.centered("RED=TOP", "red", "3x5", y=9)
+    c.centered(f"{c.width}x{c.height} ALL ROWS", "white", "3x5", y=15)
+    c.centered("BLUE=BOTTOM", "sky", "3x5", y=21)
     return c
