@@ -8,8 +8,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from glance.moon import SYNODIC_MONTH, lit, phase_at
+from glance.moon import (FINE_MARIA_RADIUS, MARIA, MARIA_COARSE,
+                         SYNODIC_MONTH, in_mare, lit, phase_at)
+from glance.canvas import Canvas
 from glance.scenes import REGISTRY
+from glance.scenes import sky
 
 TZ = ZoneInfo("America/Los_Angeles")
 
@@ -82,6 +85,119 @@ def test_the_lit_side_swaps_between_waxing_and_waning():
 
 def test_outside_the_disc_is_never_lit():
     assert not lit(20, 0, 8, 0.5)
+
+
+# --- the maria --------------------------------------------------------------
+
+def disc(radius, phase=0.5):
+    """Every pixel of the disc, as (x, y, is_lit, is_mare)."""
+    return [(x, y, lit(x, y, radius, phase), in_mare(x, y, radius))
+            for y in range(-radius, radius + 1)
+            for x in range(-radius, radius + 1)
+            if x * x + y * y <= radius * radius]
+
+
+@pytest.mark.parametrize("radius", [3, 4, 5, 6, 7, 9, 14])
+def test_the_maria_cover_about_a_third_of_the_near_side(radius):
+    """The real figure is close to 31%. Well off in either direction means a
+    smear or a speckle, not markings."""
+    cells = disc(radius)
+    share = sum(m for _, _, _, m in cells) / len(cells)
+    assert 0.18 <= share <= 0.42, f"radius {radius}: {share:.0%}"
+
+
+@pytest.mark.parametrize("radius", [3, 4, 5, 6, 7, 9, 14])
+def test_no_mare_stands_alone(radius):
+    """Every mare pixel touches another. A lone dark pixel reads as a dead
+    sub-pixel, not a marking.
+
+    This is a floor, not the reason the small discs use a coarser map -- that
+    was a judgement about how ragged the boundary looks at nine pixels across,
+    which no assertion here captures.
+    """
+    marked = {(x, y) for x, y, _, m in disc(radius) if m}
+    lonely = [p for p in marked
+              if not any((p[0] + dx, p[1] + dy) in marked
+                         for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                         if (dx, dy) != (0, 0))]
+    assert not lonely, f"radius {radius}: isolated mare pixels at {lonely}"
+
+
+def test_small_discs_use_the_coarse_map():
+    """Below the threshold the two-mass map is in force, above it the real
+    seven plains."""
+    def by_table(table, x, y, radius):
+        for nx, ny, nr in table:
+            dx, dy = x - nx * radius, y - ny * radius
+            limit = nr * radius - 0.1
+            if limit > 0.0 and dx * dx + dy * dy <= limit * limit:
+                return True
+        return False
+
+    for radius, table in ((FINE_MARIA_RADIUS - 1, MARIA_COARSE),
+                          (FINE_MARIA_RADIUS, MARIA),
+                          (FINE_MARIA_RADIUS + 3, MARIA)):
+        for x, y, _, mare in disc(radius):
+            assert mare == by_table(table, x, y, radius), (radius, x, y)
+
+    # The maps really are different, or the check above proves nothing.
+    assert ([m for _, _, _, m in disc(FINE_MARIA_RADIUS - 1)]
+            != [by_table(MARIA, x, y, FINE_MARIA_RADIUS - 1)
+                for x, y, _, _ in disc(FINE_MARIA_RADIUS - 1)])
+
+
+def test_the_same_face_always_shows():
+    """The moon is tidally locked, so the pattern cannot drift with phase."""
+    for phase in (0.0, 0.25, 0.5, 0.75):
+        assert [m for _, _, _, m in disc(7, phase)] == [m for _, _, _, m in disc(7)]
+
+
+def test_the_moon_is_drawn_in_three_shades_when_full():
+    c = Canvas(width=32)
+    sky._draw_moon(c, 16, 16, 0.5, radius=7)
+    shades = {c.image.getpixel((x, y)) for x in range(32) for y in range(32)}
+    assert sky.SURFACE in shades
+    assert sky.MARE in shades
+
+
+def test_texture_can_be_turned_off():
+    plain, textured = Canvas(width=32), Canvas(width=32)
+    sky._draw_moon(plain, 16, 16, 0.5, radius=7, texture=False)
+    sky._draw_moon(textured, 16, 16, 0.5, radius=7, texture=True)
+    assert sky.MARE not in plain.image.get_flattened_data()
+    assert sky.MARE in textured.image.get_flattened_data()
+    assert plain.image.get_flattened_data() != textured.image.get_flattened_data()
+
+
+def test_no_markings_survive_into_the_shadow():
+    """A dark patch on the unlit half would just be the shadow. Maria are only
+    painted where the sun is actually falling."""
+    c = Canvas(width=32)
+    sky._draw_moon(c, 16, 16, 0.25, radius=7)      # first quarter
+    for y in range(-7, 8):
+        for x in range(-7, 8):
+            if x * x + y * y > 49 or lit(x, y, 7, 0.25):
+                continue
+            assert c.image.getpixel((16 + x, 16 + y)) == sky.EARTHSHINE
+
+
+def test_the_new_moon_shows_no_markings():
+    c = Canvas(width=32)
+    sky._draw_moon(c, 16, 16, 0.0, radius=7)
+    assert sky.MARE not in c.image.get_flattened_data()
+    assert sky.SURFACE not in c.image.get_flattened_data()
+
+
+def test_the_markings_read_at_the_size_the_panel_draws_them():
+    """The sky scene uses radius 4. A pattern that only works on the contact
+    sheet is no good."""
+    c = Canvas(width=16)
+    sky._draw_moon(c, 8, 16, 0.5, radius=4)
+    counts = {}
+    for px in c.image.get_flattened_data():
+        counts[px] = counts.get(px, 0) + 1
+    assert counts.get(sky.MARE, 0) >= 6
+    assert counts.get(sky.SURFACE, 0) >= 6
 
 
 # --- the scene --------------------------------------------------------------

@@ -16,6 +16,7 @@ from typing import Any
 
 from ..canvas import Canvas
 from ..fonts import get_font
+from ..moon import in_mare
 from ..moon import lit as moon_lit
 from ..moon import phase_at
 from ..palette import RGB, dim, mix, parse
@@ -169,17 +170,28 @@ def _draw_sun(c: Canvas, x: int, y: int, low: bool) -> None:
             c.pixel(x + dx * step, y + dy * step, dim(colour, 0.85))
 
 
-def _draw_moon(c: Canvas, x: int, y: int, phase: float, radius: int = 4) -> None:
-    """The disc with its real terminator. A sliver of earthshine keeps a thin
-    crescent from vanishing into the sky entirely."""
+SURFACE = (235, 235, 225)
+MARE = (176, 178, 186)
+EARTHSHINE = (26, 26, 40)
+
+
+def _draw_moon(c: Canvas, x: int, y: int, phase: float, radius: int = 4,
+               texture: bool = True) -> None:
+    """The disc with its real terminator and the dark plains.
+
+    A sliver of earthshine keeps a thin crescent from vanishing into the sky,
+    and the maria are only drawn where the sun is actually falling — a dark
+    patch in the shadowed half would just be the shadow.
+    """
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             if dx * dx + dy * dy > radius * radius:
                 continue
             if moon_lit(dx, dy, radius, phase):
-                c.pixel(x + dx, y + dy, (235, 235, 225))
+                shade = MARE if texture and in_mare(dx, dy, radius) else SURFACE
+                c.pixel(x + dx, y + dy, shade)
             else:
-                c.pixel(x + dx, y + dy, (26, 26, 40))
+                c.pixel(x + dx, y + dy, EARTHSHINE)
 
 
 def _fmt(when: datetime | None) -> str:
@@ -209,6 +221,7 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="Where the date sits, or none to leave it out"),
               Param("weather", "bool", True,
                     help="Cloud, rain and fog from the current conditions"),
+              Param("texture", "bool", True, help="Draw the moon's dark plains"),
               Param("stars", "number", 26, minimum=0, maximum=80),
           ])
 def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -289,7 +302,8 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     if daytime:
         _draw_sun(c, x, y, low=altitude < 0.25)
     else:
-        _draw_moon(c, x, y, phase_at(now).phase)
+        _draw_moon(c, x, y, phase_at(now).phase,
+                   texture=bool(params.get("texture", True)))
 
     # Clouds go on last so they pass in front of the sun, which is the whole
     # reason an overcast day reads as overcast.

@@ -68,6 +68,55 @@ def phase_at(when: datetime | None = None) -> Moon:
     )
 
 
+# The dark plains, roughly where they actually are: the moon is tidally
+# locked, so the same face is always turned toward us and the pattern is
+# fixed. Positions are fractions of the radius, x right and y down, which
+# keeps them correct at any size.
+#
+#   Imbrium upper left, Serenitatis and Tranquillitatis upper right,
+#   Procellarum down the left flank, Crisium a dot near the right limb,
+#   Nubium and Nectaris along the bottom.
+MARIA = (
+    (-0.34, -0.36, 0.30),    # Imbrium
+    (0.14, -0.34, 0.22),     # Serenitatis
+    (0.36, -0.10, 0.24),     # Tranquillitatis
+    (0.66, -0.26, 0.12),     # Crisium
+    (-0.58, 0.04, 0.26),     # Procellarum
+    (-0.26, 0.40, 0.20),     # Nubium
+    (0.34, 0.34, 0.16),      # Nectaris
+)
+
+# The seven plains need room. Much under a seven pixel radius the small ones
+# shrink to a pixel apiece -- Crisium is a lone dark dot at radius six, which
+# reads as a dead sub-pixel -- and the boundary of the rest turns ragged
+# enough to look like dither. Smaller discs get the two masses the eye
+# actually picks out instead: Imbrium with Procellarum, and Serenitatis with
+# Tranquillitatis.
+MARIA_COARSE = (
+    (-0.30, -0.30, 0.46),
+    (0.34, -0.14, 0.38),
+)
+
+FINE_MARIA_RADIUS = 7
+
+
+def in_mare(x: float, y: float, radius: float) -> bool:
+    """Whether a point on the disc falls on one of the dark plains."""
+    if radius <= 0:
+        return False
+    table = MARIA if radius >= FINE_MARIA_RADIUS else MARIA_COARSE
+    for nx, ny, nr in table:
+        dx = x - nx * radius
+        dy = y - ny * radius
+        # A slight inset. A plain otherwise claims every pixel whose centre is
+        # barely inside, and the maria creep past the third of the near side
+        # they really cover.
+        limit = nr * radius - 0.1
+        if limit > 0.0 and dx * dx + dy * dy <= limit * limit:
+            return True
+    return False
+
+
 def lit(x: float, y: float, radius: float, phase: float) -> bool:
     """Whether a point inside the disc is in sunlight.
 
