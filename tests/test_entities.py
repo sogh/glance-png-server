@@ -186,3 +186,99 @@ def test_it_drops_out_of_rotation_when_unconfigured(app, now):
     ctx.homeassistant = None
     assert not REGISTRY["entities"].available(ctx, {"entities": "sensor.x"})
     assert REGISTRY["entities"].available(ctx, {"entities": "sensor.x", "always": True})
+
+
+# --- recency ----------------------------------------------------------------
+
+def test_ago_never_says_now():
+    """The activity scene uses NOW for a zone that is active this instant.
+    Two meanings for one word, separated only by colour, is not a distinction
+    a glance can make."""
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    for seconds in (0, 5, 30, 59, 89):
+        e = Entity("b.d", "off", last_changed=now - timedelta(seconds=seconds))
+        assert e.ago(now) != "NOW", f"{seconds}s ago"
+        assert e.ago(now) == "1M"
+
+
+def test_ago_units():
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    def ago(**kw):
+        return Entity("b.d", "off", last_changed=now - timedelta(**kw)).ago(now)
+    assert ago(minutes=30) == "30M"
+    assert ago(hours=5) == "5H"
+    assert ago(days=3) == "3D"
+    assert Entity("b.d", "off").ago(now) == "--"
+
+
+def test_zones_rank_by_recency(primed):
+    import json
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    states = [
+        {"entity_id": "binary_sensor.far", "state": "off",
+         "last_changed": (now - timedelta(hours=9)).isoformat(),
+         "attributes": {"friendly_name": "Far Field Motion", "device_class": "motion"}},
+        {"entity_id": "binary_sensor.near", "state": "off",
+         "last_changed": (now - timedelta(minutes=3)).isoformat(),
+         "attributes": {"friendly_name": "Driveway Motion", "device_class": "motion"}},
+    ]
+    primed.cache_file.write_text(json.dumps(states))
+    ranked = primed.of_class("motion")
+    assert [e.entity_id for e in ranked] == ["binary_sensor.near", "binary_sensor.far"]
+
+
+def test_unavailable_duplicates_are_dropped(primed):
+    """Two integrations can expose the same camera; the dead copy is noise."""
+    import json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    primed.cache_file.write_text(json.dumps([
+        {"entity_id": "binary_sensor.a", "state": "off", "last_changed": now,
+         "attributes": {"friendly_name": "Barn Motion", "device_class": "motion"}},
+        {"entity_id": "binary_sensor.b", "state": "unavailable", "last_changed": now,
+         "attributes": {"friendly_name": "Barn Motion", "device_class": "motion"}},
+    ]))
+    assert [e.entity_id for e in primed.of_class("motion")] == ["binary_sensor.a"]
+
+
+def test_shared_suffixes_are_trimmed():
+    from glance.scenes.activity import tidy
+    assert tidy("Driveway Motion") == "DRIVEWAY"
+    assert tidy("Barn Top View Motion") == "BARN TOP VIEW"
+    assert tidy("Sheep  Motion") == "SHEEP"
+    assert tidy("Greenhouse") == "GREENHOUSE"
+
+
+def test_the_activity_scene_renders(app, primed):
+    import json
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+    primed.cache_file.write_text(json.dumps([
+        {"entity_id": f"binary_sensor.z{i}", "state": "on" if i == 0 else "off",
+         "last_changed": (now - timedelta(minutes=i * 20)).isoformat(),
+         "attributes": {"friendly_name": f"Zone {i} Motion", "device_class": "motion"}}
+        for i in range(4)
+    ]))
+    ctx = app.context(brightness=1.0)
+    ctx.homeassistant = primed
+    c = REGISTRY["activity"].render(ctx, {})
+    assert c.image.size == (192, 32)
+    ambers = [p for p in c.image.get_flattened_data()
+              if p[0] > 200 and 120 < p[1] < 220 and p[2] < 80]
+    assert ambers, "the active zone should stand out"
+    edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
+    assert all(sum(p) == 0 for p in edge)
+
+
+def test_activity_with_no_sensors_says_so(app, tmp_path):
+    import json
+    from glance.sources.homeassistant import HomeAssistantSource
+    src = HomeAssistantSource("http://ha.invalid", "tok", cache_dir=tmp_path, refresh=99999)
+    src.cache_file.write_text(json.dumps([]))
+    ctx = app.context(brightness=1.0)
+    ctx.homeassistant = src
+    c = REGISTRY["activity"].render(ctx, {})
+    assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 0

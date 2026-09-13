@@ -282,6 +282,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `instagram` | Follower and post counts | a Graph API token is set |
 | `baseball` | Last result and next game, and where to watch | teams are configured |
 | `entities` | Home Assistant entity states | entities resolve |
+| `activity` | Which zone saw movement, and how long ago | motion sensors exist |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -651,7 +652,27 @@ offer a **dropdown of the entities you actually have** rather than making you
 type ids from memory. `=Label` shortens a long `friendly_name` for a 64px
 column without renaming anything in Home Assistant.
 
-It is **device-class aware**, so it colours what matters with no
+#### `activity` — where something last happened
+
+A list of motion sensors mostly reads `OFF, OFF, OFF, OFF`, which tells you
+nothing. What is worth knowing is *which* zone saw movement and *how long
+ago*, so `activity` ranks them by recency:
+
+```
+LAST MOTION
+DRIVEWAY            1M
+BARN OUTSIDE       33M
+BARN TOP VIEW      38M
+```
+
+Leave `entities` blank and it gathers every motion sensor you have. A zone
+active *right now* reads `NOW` in amber. Shared suffixes are trimmed —
+"Driveway Motion" becomes "DRIVEWAY" — because a narrow panel cannot afford a
+word every row repeats.
+
+#### Colouring
+
+`entities` is **device-class aware**, so it colours what matters with no
 configuration: an open door, a battery at or below 20%, a leak or smoke
 detector all read red. An unavailable entity draws `--` rather than its last
 known value — Home Assistant says "unavailable" explicitly, and passing that

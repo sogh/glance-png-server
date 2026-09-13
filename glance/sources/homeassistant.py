@@ -15,6 +15,7 @@ import json
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -35,6 +36,30 @@ class Entity:
     name: str = ""
     unit: str = ""
     device_class: str = ""
+    last_changed: datetime | None = None
+
+    def since(self, now: datetime | None = None) -> float:
+        """Seconds since this entity last changed state."""
+        if self.last_changed is None:
+            return float("inf")
+        now = now or datetime.now(timezone.utc)
+        return (now - self.last_changed).total_seconds()
+
+    def ago(self, now: datetime | None = None) -> str:
+        """How long ago, short enough for a panel."""
+        seconds = self.since(now)
+        if seconds == float("inf"):
+            return "--"
+        # Deliberately never "NOW": the scene uses that word for a zone that
+        # is active *right now*, and two meanings for one word separated only
+        # by colour is not a distinction a glance can make.
+        if seconds < 90:
+            return "1M"
+        if seconds < 90 * 60:
+            return f"{int(seconds // 60)}M"
+        if seconds < 48 * 3600:
+            return f"{int(seconds // 3600)}H"
+        return f"{int(seconds // 86400)}D"
 
     @property
     def available(self) -> bool:
@@ -125,12 +150,20 @@ class HomeAssistantSource:
     @staticmethod
     def _entity(node: dict) -> Entity:
         attrs = node.get("attributes", {}) or {}
+        changed = None
+        raw = node.get("last_changed")
+        if raw:
+            try:
+                changed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                changed = None
         return Entity(
             entity_id=str(node.get("entity_id", "")),
             state=str(node.get("state", "")),
             name=str(attrs.get("friendly_name") or node.get("entity_id", "")),
             unit=str(attrs.get("unit_of_measurement") or ""),
             device_class=str(attrs.get("device_class") or ""),
+            last_changed=changed,
         )
 
     def all(self) -> list[Entity]:
@@ -159,6 +192,16 @@ class HomeAssistantSource:
             entity_id = entity_id.strip()
             out.append((self.get(entity_id), entity_id, label.strip()))
         return out
+
+    def of_class(self, device_class: str) -> list[Entity]:
+        """Available entities of one device class, newest change first.
+
+        Duplicates are common -- two integrations can expose the same camera --
+        so unavailable copies are dropped rather than shown as gaps.
+        """
+        found = [e for e in self.all()
+                 if e.device_class == device_class and e.available]
+        return sorted(found, key=lambda e: e.since())
 
     def ids(self, prefixes: tuple[str, ...] = ()) -> list[str]:
         """Entity ids, for the editor's dropdown."""
