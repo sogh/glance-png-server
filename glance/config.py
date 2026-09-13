@@ -73,6 +73,7 @@ class Settings:
     weather: dict[str, Any] = field(default_factory=dict)
     instagram: dict[str, Any] = field(default_factory=dict)
     baseball: dict[str, Any] = field(default_factory=dict)
+    homeassistant: dict[str, Any] = field(default_factory=dict)
     ics_refresh: int = 900
     ics_lookahead_days: int = 14
     channels: dict[str, list[ChannelEntry]] = field(default_factory=dict)
@@ -148,6 +149,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         weather=dict(src.get("weather", {}) or {}),
         instagram=dict(src.get("instagram", {}) or {}),
         baseball=dict(src.get("baseball", {}) or {}),
+        homeassistant=dict(src.get("homeassistant", {}) or {}),
         ics_lookahead_days=int(src.get("lookahead_days", cal.get("lookahead_days", 14))),
         raw=raw,
     )

@@ -93,6 +93,7 @@ class RenderContext:
     weather: WeatherSource | None = None
     instagram: Any = None
     baseball: Any = None
+    homeassistant: Any = None
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None

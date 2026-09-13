@@ -147,6 +147,17 @@ sources:
     refresh: 600              # seconds between checks
     live_refresh: 60          # poll harder while a game is being played
 
+  # Home Assistant entity states.
+  #
+  # The token is a long-lived access token: open Home Assistant, click your
+  # name at the bottom of the sidebar, go to the Security tab, scroll to
+  # "Long-lived access tokens" and create one. It is shown once, so copy it
+  # straight into .env as GLANCE_HA_TOKEN.
+  homeassistant:
+    url: "${GLANCE_HA_URL:-}"
+    token: "${GLANCE_HA_TOKEN:-}"
+    refresh: 60
+
   refresh: 900              # seconds between calendar fetches
   lookahead_days: 14
 

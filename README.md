@@ -281,6 +281,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `weather` | Current conditions, high and low | coordinates are set |
 | `instagram` | Follower and post counts | a Graph API token is set |
 | `baseball` | Last result and next game, and where to watch | teams are configured |
+| `entities` | Home Assistant entity states | entities resolve |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -621,6 +622,41 @@ pixel by pixel.
 
 As with the calendar, a failed fetch serves the cached reading: a slightly
 stale temperature beats a blank panel.
+
+### Home Assistant
+
+```yaml
+sources:
+  homeassistant:
+    url: "${GLANCE_HA_URL:-}"       # http://your-ha:8123
+    token: "${GLANCE_HA_TOKEN:-}"
+    refresh: 60
+```
+
+The token is a **long-lived access token**: open
+`http://your-ha:8123/profile/security` and scroll to the bottom of that page.
+It is the last section, below multi-factor auth and refresh tokens, which is
+usually why people cannot find it. Shown once, so copy it straight into
+`.env`.
+
+```yaml
+- scene: entities
+  params:
+    entities: "sensor.greenhouse_temp=GREENHOUSE, binary_sensor.barn_door=BARN"
+    layout: columns      # up to 3 side by side; `rows` stacks up to 4
+```
+
+One call to `/api/states` fetches everything, which also means the editor can
+offer a **dropdown of the entities you actually have** rather than making you
+type ids from memory. `=Label` shortens a long `friendly_name` for a 64px
+column without renaming anything in Home Assistant.
+
+It is **device-class aware**, so it colours what matters with no
+configuration: an open door, a battery at or below 20%, a leak or smoke
+detector all read red. An unavailable entity draws `--` rather than its last
+known value — Home Assistant says "unavailable" explicitly, and passing that
+through beats printing a stale number as though the sensor were still
+reporting.
 
 ### Baseball
 

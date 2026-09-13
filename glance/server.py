@@ -143,6 +143,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
             return sorted(REGISTRY)
         if marker == "@calendars":
             return glance.calendars.names
+        if marker == "@entities":
+            try:
+                return glance.homeassistant.ids()[:400]
+            except Exception:  # noqa: BLE001 - a dropdown must never break the page
+                return []
         if marker == "@static":
             return [f.name for f in artstore.listing(glance.settings.static_dir)]
         return []

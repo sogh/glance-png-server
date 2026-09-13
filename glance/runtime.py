@@ -24,6 +24,7 @@ from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
 from .sources.baseball import BaseballSource
+from .sources.homeassistant import HomeAssistantSource
 from .sources.instagram import InstagramSource
 from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
@@ -50,6 +51,7 @@ class GlanceApp:
         self.weather = self._build_weather(settings)
         self.instagram = self._build_instagram(settings)
         self.baseball = self._build_baseball(settings)
+        self.homeassistant = self._build_ha(settings)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -96,6 +98,16 @@ class GlanceApp:
             cache_dir=settings.cache_dir,
             refresh=int(spec.get("refresh", 600)),
             live_refresh=int(spec.get("live_refresh", 60)),
+        )
+
+    @staticmethod
+    def _build_ha(settings: Settings) -> HomeAssistantSource:
+        spec = settings.homeassistant or {}
+        return HomeAssistantSource(
+            url=str(spec.get("url", "") or ""),
+            token=str(spec.get("token", "") or ""),
+            cache_dir=settings.cache_dir,
+            refresh=int(spec.get("refresh", 60)),
         )
 
     @classmethod
@@ -148,6 +160,7 @@ class GlanceApp:
             weather_changed = fresh.weather != self.settings.weather
             instagram_changed = fresh.instagram != self.settings.instagram
             baseball_before = self.settings.baseball
+            ha_before = self.settings.homeassistant
             self.settings = fresh
             self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
             if weather_changed:
@@ -156,6 +169,8 @@ class GlanceApp:
                 self.instagram = self._build_instagram(fresh)
             if fresh.baseball != baseball_before:
                 self.baseball = self._build_baseball(fresh)
+            if fresh.homeassistant != ha_before:
+                self.homeassistant = self._build_ha(fresh)
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
@@ -263,6 +278,7 @@ class GlanceApp:
             weather=self.weather,
             instagram=self.instagram,
             baseball=self.baseball,
+            homeassistant=self.homeassistant,
             todos=self.todos,
             holidays=self.holidays,
         )
@@ -357,6 +373,10 @@ class GlanceApp:
                 "weather": {
                     "configured": self.weather.configured,
                     "last_error": self.weather.last_error,
+                },
+                "homeassistant": {
+                    "configured": self.homeassistant.configured,
+                    "last_error": self.homeassistant.last_error,
                 },
                 "baseball": {
                     "configured": self.baseball.configured,
