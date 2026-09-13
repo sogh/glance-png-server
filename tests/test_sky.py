@@ -185,11 +185,28 @@ def test_stars_do_not_reshuffle_between_renders(app):
 
 # --- the date ---------------------------------------------------------------
 
-def test_the_date_appears(app):
-    with_date = render(app, DAY.replace(hour=12), {"date": "sky"})
+def _region(canvas, x0, y0, x1, y1):
+    return [canvas.image.getpixel((x, y))
+            for x in range(x0, x1) for y in range(y0, y1)]
+
+
+@pytest.mark.parametrize("placement,box", [
+    ("sky", (2, 1, 70, 8)),
+    ("horizon", (60, 18, 132, 26)),
+    ("ground", (60, 26, 132, 32)),
+])
+def test_the_date_appears_where_it_should(app, placement, box):
+    """Counting lit pixels cannot see this: in daylight the whole sky is
+    coloured, so the text changes values without changing the count."""
+    with_date = render(app, DAY.replace(hour=12), {"date": placement})
     without = render(app, DAY.replace(hour=12), {"date": "none"})
-    lit_count = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
-    assert lit_count(with_date) > lit_count(without)
+    assert _region(with_date, *box) != _region(without, *box)
+
+
+def test_none_really_draws_nothing(app):
+    plain = render(app, DAY.replace(hour=12), {"date": "none"})
+    same = render(app, DAY.replace(hour=12), {"date": "none"})
+    assert list(plain.image.get_flattened_data()) == list(same.image.get_flattened_data())
 
 
 @pytest.mark.parametrize("placement", ["sky", "horizon", "ground"])
