@@ -357,3 +357,29 @@ def test_the_weather_holds_still_between_fetches(app):
     a = weather_render(app, "rain", DAY.replace(hour=13))
     b = weather_render(app, "rain", DAY.replace(hour=13))
     assert list(a.image.get_flattened_data()) == list(b.image.get_flattened_data())
+
+
+def test_a_new_moon_has_no_lit_pixels_at_all():
+    """The terminator passes through both poles at every phase, so the
+    comparison is degenerate there and came out lit even at new moon."""
+    radius = 7
+    assert not any(lit(x, y, radius, 0.0)
+                   for x in range(-radius, radius + 1)
+                   for y in range(-radius, radius + 1))
+
+
+def test_a_full_moon_lights_every_pixel_including_the_poles():
+    radius = 7
+    inside = [(x, y) for x in range(-radius, radius + 1)
+              for y in range(-radius, radius + 1)
+              if x * x + y * y <= radius * radius]
+    assert all(lit(x, y, radius, 0.5) for x, y in inside)
+
+
+def test_the_poles_never_stand_out_from_their_neighbours():
+    """A lit pole on a dark limb reads as a speck of dirt on the panel."""
+    radius = 7
+    for phase in (0.0, 0.05, 0.95, 0.5):
+        top = lit(0, -radius, radius, phase)
+        near_top = lit(0, -radius + 2, radius, phase)
+        assert top == near_top, f"phase {phase}"

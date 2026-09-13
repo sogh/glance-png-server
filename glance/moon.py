@@ -77,6 +77,23 @@ def lit(x: float, y: float, radius: float, phase: float) -> bool:
     """
     if x * x + y * y > radius * radius:
         return False
+
+    # At the extremes the terminator lies exactly along the limb, and the
+    # comparison below is degenerate: at new moon `edge` equals the half-width
+    # so the outermost pixel of every row satisfies `x >= edge`, lighting a
+    # rim on a disc that should be entirely dark. Settle those two cases
+    # outright rather than leaning on floating point to land the right way.
+    illumination = (1.0 - math.cos(2.0 * math.pi * phase)) / 2.0
+    if illumination <= 0.005:
+        return False
+    if illumination >= 0.995:
+        return True
+
     half = math.sqrt(max(0.0, radius * radius - y * y))
+    if half < 1.0:
+        # The terminator passes through both poles at every phase, so those
+        # pixels are on it whatever the phase. Let them follow the disc.
+        return illumination >= 0.5
+
     edge = math.cos(2.0 * math.pi * phase) * half
     return x >= edge if phase <= 0.5 else x <= -edge
