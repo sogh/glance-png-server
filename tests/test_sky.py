@@ -181,3 +181,45 @@ def test_stars_do_not_reshuffle_between_renders(app):
     a = render(app, DAY.replace(hour=23))
     b = render(app, DAY.replace(hour=23))
     assert a.to_ascii() == b.to_ascii()
+
+
+# --- the date ---------------------------------------------------------------
+
+def test_the_date_appears(app):
+    with_date = render(app, DAY.replace(hour=12), {"date": "sky"})
+    without = render(app, DAY.replace(hour=12), {"date": "none"})
+    lit_count = lambda c: sum(1 for p in c.image.get_flattened_data() if sum(p) > 0)
+    assert lit_count(with_date) > lit_count(without)
+
+
+@pytest.mark.parametrize("placement", ["sky", "horizon", "ground"])
+def test_every_placement_renders(app, placement):
+    for hour in (12, 22):
+        c = render(app, DAY.replace(hour=hour), {"date": placement})
+        assert c.image.size == (192, 32)
+
+
+def test_the_date_never_collides_with_the_moon_label(app):
+    """On the horizon line the two drew straight through each other, which
+    came out as 'SUNKCRESP'."""
+    c = render(app, DAY.replace(hour=22), {"date": "horizon", "label": True})
+    # The moon label occupies rows 27-31; the date must stay clear of them.
+    date_rows = [y for y in range(18, 26)
+                 if any(sum(c.image.getpixel((x, y))) > 0 for x in range(60, 132))]
+    assert date_rows, "the date should sit above the horizon"
+
+
+def test_the_date_recedes_rather_than_shouting(app):
+    """It is a caption, not a headline: dimmer than the sunrise time."""
+    c = render(app, DAY.replace(hour=12), {"date": "sky"})
+    date_px = [c.image.getpixel((x, 3)) for x in range(3, 60)]
+    brightest_date = max((sum(p) for p in date_px), default=0)
+    time_px = [c.image.getpixel((x, 28)) for x in range(2, 24)]
+    brightest_time = max((sum(p) for p in time_px), default=0)
+    assert brightest_date < brightest_time
+
+
+def test_the_sky_date_stays_clear_of_the_arc(app):
+    """The sun reaches the top centre at midday; the caption sits far left."""
+    c = render(app, DAY.replace(hour=12), {"date": "sky"})
+    assert c.image.size == (192, 32)

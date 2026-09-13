@@ -103,6 +103,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
           params=[
               Param("times", "bool", True, help="Sunrise and sunset in the corners"),
               Param("label", "bool", True, help="Name the moon phase at night"),
+              Param("date", "select", "sky",
+                    options=["sky", "horizon", "ground", "none"],
+                    help="Where the date sits, or none to leave it out"),
               Param("stars", "number", 26, minimum=0, maximum=80),
           ])
 def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -173,6 +176,20 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     else:
         _draw_moon(c, x, y, phase_at(now).phase)
 
+    stamp = now.strftime("%a %-d %b").upper()
+    placement = str(params.get("date", "sky"))
+
+    if placement == "sky":
+        # Set into the sky like a caption on a painting: dim enough to recede,
+        # and in the one corner the arc never reaches.
+        c.text(3, 2, stamp, dim("white", 0.45 if daytime else 0.55), small)
+    elif placement == "horizon":
+        # Floating just above the horizon rather than on it: sitting on the
+        # line needed a dark backing that cut the horizon in half, and at
+        # night it drew straight through the moon phase label below.
+        c.text(c.width // 2, HORIZON - 6, stamp,
+               dim("white", 0.55 if daytime else 0.7), small, "center")
+
     if bool(params.get("times", True)):
         # A dark backing keeps the times readable when the sun is sitting on
         # the horizon right behind them.
@@ -182,7 +199,16 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
                     small.measure(set_) + 4, 6, (8, 10, 8))
         c.text(2, 27, rise, dim("amber", 0.9), small)
         c.text(c.width - 2, 27, set_, dim("orange", 0.9), small, "right")
+    centre = []
+    if placement == "ground":
+        centre.append((stamp, dim("white", 0.8)))
     if bool(params.get("label", True)) and not daytime:
-        c.text(c.width // 2, 27, phase_at(now).short_name, dim("white", 0.7),
-               small, "center", 80)
+        centre.append((phase_at(now).short_name, dim("white", 0.6)))
+    if centre:
+        gap = 5
+        total = sum(small.measure(t) for t, _ in centre) + gap * (len(centre) - 1)
+        x = (c.width - total) // 2
+        for text, colour in centre:
+            c.text(x, 27, text, colour, small)
+            x += small.measure(text) + gap
     return c

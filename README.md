@@ -694,9 +694,15 @@ night from a fixed field so they never flicker between fetches.
   params:
     times: true      # sunrise and sunset in the corners
     label: true      # name the moon phase at night
+    date: sky        # sky | horizon | ground | none
     stars: 26
   dwell: 300
 ```
+
+The date is set into the upper-left of the sky, dimmer than the times, so it
+reads as a caption on a painting rather than a label stuck over it. `horizon`
+floats it just above the ground line and `ground` puts it in the bottom band
+beside the moon phase, if you would rather have it bolder.
 
 **Nothing to configure.** Sunrise and sunset come from the coordinates already
 set for weather, and the moon phase is arithmetic — a reference new moon plus
