@@ -74,6 +74,7 @@ class GlanceApp:
             cache_dir=settings.cache_dir,
             units=str(spec.get("units", "fahrenheit")),
             refresh=int(spec.get("refresh", 900)),
+            tz=settings.tz,
         )
         source.air_quality = bool(spec.get("air_quality", True))
         return source

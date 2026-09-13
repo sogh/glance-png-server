@@ -15,6 +15,10 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from datetime import datetime
+
+from zoneinfo import ZoneInfo
+
 import httpx
 
 ENDPOINT = "https://api.open-meteo.com/v1/forecast"
@@ -83,6 +87,8 @@ class Weather:
     unit: str = "F"
     precip_chance: int | None = None      # today's max probability, percent
     precip_now: float = 0.0               # falling right now, inches
+    sunrise: datetime | None = None
+    sunset: datetime | None = None
     aqi: int | None = None                # US AQI
     forecast: list["DayForecast"] = field(default_factory=list)
 
@@ -108,7 +114,12 @@ class Weather:
 class WeatherSource:
     def __init__(self, latitude: float | None, longitude: float | None,
                  cache_dir: Path, units: str = "fahrenheit",
-                 refresh: int = 900, timeout: float = 10.0) -> None:
+                 refresh: int = 900, timeout: float = 10.0,
+                 tz: ZoneInfo | None = None) -> None:
+        # Open-Meteo is asked for timezone=auto, so sunrise and sunset arrive
+        # as naive local times and need a zone attached to be comparable with
+        # anything else.
+        self.tz = tz or ZoneInfo("UTC")
         self.latitude = latitude
         self.longitude = longitude
         self.units = units
@@ -147,7 +158,7 @@ class WeatherSource:
                     "current": "temperature_2m,apparent_temperature,weather_code,"
                                "is_day,precipitation",
                     "daily": "temperature_2m_max,temperature_2m_min,weather_code,"
-                             "precipitation_probability_max",
+                             "precipitation_probability_max,sunrise,sunset",
                     "temperature_unit": self.units,
                     "precipitation_unit": "inch",
                     "timezone": "auto",
@@ -208,6 +219,15 @@ class WeatherSource:
             aqi_raw = (air.get("current") or {}).get("us_aqi")
             chance = (daily.get("precipitation_probability_max") or [None])[0]
 
+            def when(key: str) -> datetime | None:
+                values = daily.get(key) or []
+                if not values:
+                    return None
+                try:
+                    return datetime.fromisoformat(str(values[0])).replace(tzinfo=self.tz)
+                except (ValueError, TypeError):
+                    return None
+
             days: list[DayForecast] = []
             times = daily.get("time") or []
             codes = daily.get("weather_code") or []
@@ -233,6 +253,8 @@ class WeatherSource:
                 precip_now=float(cur.get("precipitation", 0) or 0),
                 aqi=None if aqi_raw is None else round(float(aqi_raw)),
                 forecast=days,
+                sunrise=when("sunrise"),
+                sunset=when("sunset"),
             )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             self.last_error = f"unexpected payload: {exc}"

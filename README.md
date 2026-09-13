@@ -283,6 +283,7 @@ and the second steps aside. Supported by `todos` and `agenda`.
 | `baseball` | Last result and next game, and where to watch | teams are configured |
 | `entities` | Home Assistant entity states | entities resolve |
 | `activity` | Which zone saw movement, and how long ago | motion sensors exist |
+| `sky` | Sun and moon crossing the sky, with the real phase | coordinates are set |
 | `date` | Day and date, no clock | always |
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
@@ -678,6 +679,34 @@ detector all read red. An unavailable entity draws `--` rather than its last
 known value — Home Assistant says "unavailable" explicitly, and passing that
 through beats printing a stale number as though the sensor were still
 reporting.
+
+### `sky` — the day as an arc
+
+A 192×32 strip is almost exactly the shape of a horizon, so the day is drawn
+across it. The sun rises on the left, climbs to its peak at midday, sets on
+the right; after dark the moon takes the same path with **its real phase
+carved out of it**. The sky colour follows the body's height, which is what
+makes dawn and dusk warm without any special-casing, and stars come out at
+night from a fixed field so they never flicker between fetches.
+
+```yaml
+- scene: sky
+  params:
+    times: true      # sunrise and sunset in the corners
+    label: true      # name the moon phase at night
+    stars: 26
+  dwell: 300
+```
+
+**Nothing to configure.** Sunrise and sunset come from the coordinates already
+set for weather, and the moon phase is arithmetic — a reference new moon plus
+the synodic month, accurate to within a few hours, which is far better than a
+9-pixel disc can show. No API, no integration, works offline.
+
+The terminator is drawn properly rather than approximated: an ellipse seen
+edge-on, so a crescent curves the right way and swaps sides between waxing and
+waning. The unlit portion is drawn as faint earthshine instead of being left
+out, which stops a thin crescent disappearing into the sky entirely.
 
 ### Baseball
 
