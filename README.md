@@ -704,6 +704,14 @@ reads as a caption on a painting rather than a label stuck over it. `horizon`
 floats it just above the ground line and `ground` puts it in the bottom band
 beside the moon phase, if you would rather have it bolder.
 
+**The sky knows what the weather is doing.** Cloud, rain, drizzle, snow and
+fog are drawn from the same conditions the `weather` scene uses — clouds drift
+in front of the sun, rain falls from their undersides to the ground, and fog
+lies in bands along the horizon. Overcast also **mutes the sky itself**, grey
+by day and darker by night, so a rainy afternoon does not read as a bright one
+with clouds pasted over it. Fewer stars show through cloud at night. `weather:
+false` turns it off.
+
 **Nothing to configure.** Sunrise and sunset come from the coordinates already
 set for weather, and the moon phase is arithmetic — a reference new moon plus
 the synodic month, accurate to within a few hours, which is far better than a

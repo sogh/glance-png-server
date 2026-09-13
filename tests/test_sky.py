@@ -121,7 +121,7 @@ def test_it_renders_through_the_day(app):
 def test_day_and_night_look_different(app):
     noon = render(app, DAY.replace(hour=12))
     midnight = render(app, DAY.replace(hour=23))
-    assert noon.to_ascii() != midnight.to_ascii()
+    assert pixels(noon) != pixels(midnight)
     # Noon should be markedly brighter overall than midnight.
     total = lambda c: sum(sum(p) for p in c.image.get_flattened_data())
     assert total(noon) > total(midnight) * 2
@@ -240,3 +240,120 @@ def test_the_sky_date_stays_clear_of_the_arc(app):
     """The sun reaches the top centre at midday; the caption sits far left."""
     c = render(app, DAY.replace(hour=12), {"date": "sky"})
     assert c.image.size == (192, 32)
+
+
+# --- weather in the sky -----------------------------------------------------
+
+class WeatherAt:
+    configured = True
+    last_error = None
+
+    def __init__(self, condition, day):
+        self._w = type("W", (), {
+            "sunrise": datetime.combine(day, datetime.min.time().replace(hour=6, minute=43), TZ),
+            "sunset": datetime.combine(day, datetime.min.time().replace(hour=19, minute=27), TZ),
+            "condition": condition})()
+
+    def current(self):
+        return self._w
+
+
+def weather_render(app, condition, when, params=None):
+    ctx = app.context(when, brightness=1.0)
+    ctx.weather = WeatherAt(condition, when.date())
+    return REGISTRY["sky"].render(ctx, params or {})
+
+
+CONDITIONS = ["clear", "partly", "cloudy", "fog", "drizzle", "rain", "snow", "thunder"]
+
+
+def pixels(canvas):
+    """Compare by value, not by to_ascii().
+
+    to_ascii() thresholds to lit/unlit, which is fine for sparse text but
+    blind to a full-bleed sky where every pixel is above the threshold: two
+    completely different skies come out as identical blocks of '#'.
+    """
+    return list(canvas.image.get_flattened_data())
+
+
+@pytest.mark.parametrize("condition", CONDITIONS)
+def test_every_condition_renders_day_and_night(app, condition):
+    for hour in (13, 22):
+        c = weather_render(app, condition, DAY.replace(hour=hour))
+        assert c.image.size == (192, 32)
+
+
+def test_cloud_changes_the_sky(app):
+    clear = weather_render(app, "clear", DAY.replace(hour=13))
+    overcast = weather_render(app, "cloudy", DAY.replace(hour=13))
+    assert pixels(clear) != pixels(overcast)
+
+
+def test_an_overcast_day_is_greyer_than_a_clear_one(app):
+    """Not just clouds pasted on a blue sky."""
+    def zenith(c):
+        return c.image.getpixel((150, 2))
+    clear, overcast = (zenith(weather_render(app, k, DAY.replace(hour=13)))
+                       for k in ("clear", "rain"))
+    spread = lambda p: max(p) - min(p)
+    assert spread(overcast) < spread(clear), "overcast should be closer to grey"
+
+
+def test_an_overcast_night_is_not_brighter_than_a_clear_one(app):
+    """Mixing toward a daytime overcast after dark lit the sky up, which is
+    exactly backwards."""
+    def zenith(c):
+        return sum(c.image.getpixel((150, 2)))
+    clear = zenith(weather_render(app, "clear", DAY.replace(hour=22)))
+    overcast = zenith(weather_render(app, "rain", DAY.replace(hour=22)))
+    assert overcast <= clear + 70, f"night overcast {overcast} vs clear {clear}"
+
+
+def test_rain_falls_below_the_clouds_not_inside_them(app):
+    """The streaks started at a fixed offset from the cloud top, which put
+    them inside it."""
+    c = weather_render(app, "rain", DAY.replace(hour=13))
+    blues = [(x, y) for x in range(192) for y in range(26)
+             if c.image.getpixel((x, y))[2] > 180
+             and c.image.getpixel((x, y))[0] < 120]
+    assert blues, "no rain drawn"
+    # Rain should reach well down the sky, not sit in the top third.
+    assert max(y for _, y in blues) > 12
+
+
+def test_snow_and_rain_look_different(app):
+    rain = weather_render(app, "rain", DAY.replace(hour=13))
+    snow = weather_render(app, "snow", DAY.replace(hour=13))
+    assert pixels(rain) != pixels(snow)
+
+
+def test_fog_lies_along_the_ground(app):
+    c = weather_render(app, "fog", DAY.replace(hour=13))
+    upper = sum(1 for x in range(192) for y in range(0, 10)
+                if sum(c.image.getpixel((x, y))) > 380)
+    lower = sum(1 for x in range(192) for y in range(14, 26)
+                if sum(c.image.getpixel((x, y))) > 380)
+    assert lower > upper, "fog belongs near the horizon"
+
+
+def test_the_date_stays_legible_over_cloud(app):
+    """A cloud drifting across the date is atmospheric until you cannot read
+    it, so the caption is drawn last."""
+    c = weather_render(app, "rain", DAY.replace(hour=13), {"date": "sky"})
+    caption = [c.image.getpixel((x, 3)) for x in range(3, 60)]
+    darkest = min(sum(p) for p in caption)
+    brightest = max(sum(p) for p in caption)
+    assert brightest - darkest > 60, "the caption should stand out from the sky"
+
+
+def test_weather_can_be_switched_off(app):
+    on = weather_render(app, "rain", DAY.replace(hour=13))
+    off = weather_render(app, "rain", DAY.replace(hour=13), {"weather": False})
+    assert pixels(on) != pixels(off)
+
+
+def test_the_weather_holds_still_between_fetches(app):
+    a = weather_render(app, "rain", DAY.replace(hour=13))
+    b = weather_render(app, "rain", DAY.replace(hour=13))
+    assert list(a.image.get_flattened_data()) == list(b.image.get_flattened_data())

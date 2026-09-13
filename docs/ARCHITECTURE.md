@@ -87,6 +87,20 @@ slots at different channels gives both.
 `skip_columns`, because whether the near panel spilled is exactly what decides
 where the far one should start. A day offset cannot know that.
 
+## A note on testing pictures
+
+`Canvas.to_ascii()` thresholds every pixel to lit or unlit. That is exactly
+right for a sparse text scene and blind for a full-bleed one: two completely
+different skies both come out as solid blocks of `#`, and a test comparing
+them passes while seeing nothing. The same trap catches pixel *counts* —
+drawing dark text on a coloured sky changes values without changing how many
+pixels are lit.
+
+Scenes that fill the canvas are compared by
+`list(canvas.image.get_flattened_data())`, or by sampling the specific region
+under test. Both mistakes were made here and both were caught by a test that
+failed for the right reason.
+
 ## Testing
 
 `.venv/bin/python -m pytest -q` — 412 tests, ~5s, no network.

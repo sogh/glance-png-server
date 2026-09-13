@@ -31,6 +31,107 @@ DAY = ((10, 48, 122), (120, 175, 232))
 
 # Fixed so the stars do not reshuffle on every fetch.
 STAR_SEED = 0x5EED
+WEATHER_SEED = 0xC10D
+
+# How much of the sky each condition takes, and how grey it makes it.
+COVER = {
+    "clear": (0, 0.00),
+    "partly": (2, 0.22),
+    "cloudy": (3, 0.55),
+    "fog": (0, 0.70),
+    "drizzle": (3, 0.60),
+    "rain": (3, 0.70),
+    "snow": (3, 0.62),
+    "thunder": (3, 0.80),
+}
+# Cloud makes a day flat and grey, and a night *darker* -- mixing toward a
+# daytime overcast after dark lit the sky up, which is exactly backwards.
+OVERCAST_DAY = (118, 120, 126)
+OVERCAST_NIGHT = (22, 24, 32)
+
+
+def _rng(seed: int):
+    state = seed
+
+    def nxt(limit: int) -> int:
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state % max(1, limit)
+    return nxt
+
+
+def _cloud(c: Canvas, x: int, y: int, width: int, body, edge) -> int:
+    """A soft blob. Returns the row its base sits on, so rain knows where to
+    start falling from rather than inside it."""
+    r = max(2, width // 6)
+    base = y + r + 2
+    c.disc(x + width // 2, y + r, r + 1, body)
+    c.disc(x + r + 1, y + r + 1, r, body)
+    c.disc(x + width - r - 1, y + r + 1, r, body)
+    c.fill_rect(x + r, y + r, width - 2 * r, base - y - r, body)
+    # A lit rim along the top, which is what stops it reading as a grey brick.
+    c.hline(x + r + 1, y + 1, width - 2 * r - 2, edge)
+    return base
+
+
+def _clouds(c: Canvas, condition: str, night: bool) -> list[tuple[int, int, int]]:
+    """Place the cloud bank. Returns (x, base, width) for each."""
+    count, _ = COVER.get(condition, (2, 0.3))
+    if not count:
+        return []
+    body = (54, 56, 66) if night else (198, 201, 208)
+    edge = (76, 78, 90) if night else (238, 240, 246)
+    nxt = _rng(WEATHER_SEED + len(condition))
+    lane = c.width // count
+    placed = []
+    for i in range(count):
+        width = 22 + nxt(15)
+        x = i * lane + nxt(max(1, lane - width))
+        y = 1 + nxt(7)
+        base = _cloud(c, x, y, width, body, edge)
+        placed.append((x, base, width))
+    return placed
+
+
+def _precipitation(c: Canvas, condition: str, banks) -> None:
+    """Streaks or flakes falling from the base of each cloud to the ground,
+    seeded so they hold still between fetches rather than twitching."""
+    if condition not in ("rain", "drizzle", "snow", "thunder"):
+        return
+    snow = condition == "snow"
+    colour = (222, 226, 238) if snow else (78, 138, 232)
+    per_cloud = 4 if condition == "drizzle" else 7
+    nxt = _rng(WEATHER_SEED ^ 0x9E37)
+
+    for x0, base, width in banks:
+        for _ in range(per_cloud):
+            x = x0 + 2 + nxt(max(1, width - 4))
+            start = base + 1 + nxt(3)
+            if start >= HORIZON - 1:
+                continue
+            if snow:
+                for step in (0, 4, 8):
+                    yy = start + step + nxt(2)
+                    if yy < HORIZON:
+                        c.pixel(x, yy, colour)
+            else:
+                length = 3 + nxt(4)
+                for k in range(length):
+                    yy = start + k
+                    if yy < HORIZON:
+                        c.pixel(x - k // 2, yy, colour)
+
+
+def _fog(c: Canvas) -> None:
+    """Banded haze lying along the ground."""
+    nxt = _rng(WEATHER_SEED ^ 0x5150)
+    for i in range(4):
+        y = HORIZON - 3 - i * 3
+        if y < 2:
+            break
+        inset = nxt(40)
+        c.fill_rect(inset, y, c.width - inset - nxt(40), 2,
+                    (150, 152, 158) if i < 2 else (120, 122, 130))
 
 
 def _stars(width: int, count: int) -> list[tuple[int, int, int]]:
@@ -106,6 +207,8 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("date", "select", "sky",
                     options=["sky", "horizon", "ground", "none"],
                     help="Where the date sits, or none to leave it out"),
+              Param("weather", "bool", True,
+                    help="Cloud, rain and fog from the current conditions"),
               Param("stars", "number", 26, minimum=0, maximum=80),
           ])
 def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -157,10 +260,22 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         edge = max(0.0, 1.0 - altitude / 0.18)
         zenith = mix(NIGHT[0], TWILIGHT[0], edge * 0.7)
         horizon = mix(NIGHT[1], TWILIGHT[1], edge * 0.85)
+    # An overcast sky is grey, not blue. Muting the gradient before anything
+    # is drawn on it is what stops a rainy day looking like a bright one that
+    # happens to have clouds pasted over it.
+    condition = str(getattr(current, "condition", "clear") or "clear")
+    show_weather = bool(params.get("weather", True))
+    _, greyness = COVER.get(condition, (0, 0.0)) if show_weather else (0, 0.0)
+    if greyness:
+        overcast = OVERCAST_DAY if daytime else OVERCAST_NIGHT
+        zenith = mix(zenith, overcast, min(1.0, greyness * 1.15))
+        horizon = mix(horizon, overcast, min(1.0, greyness * (0.95 if daytime else 0.8)))
     _sky(c, zenith, horizon)
 
     if not daytime:
-        for x, y, brightness in _stars(c.width, int(params.get("stars", 26))):
+        # Fewer stars show through cloud.
+        visible = int(params.get("stars", 26) * (1.0 - greyness))
+        for x, y, brightness in _stars(c.width, visible):
             shade = int(brightness * (0.35 + 0.65 * min(1.0, altitude * 2)))
             if shade > 20:
                 c.pixel(x, y, (shade, shade, min(255, shade + 20)))
@@ -176,6 +291,15 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     else:
         _draw_moon(c, x, y, phase_at(now).phase)
 
+    # Clouds go on last so they pass in front of the sun, which is the whole
+    # reason an overcast day reads as overcast.
+    if show_weather:
+        if condition == "fog":
+            _fog(c)
+        else:
+            banks = _clouds(c, condition, night=not daytime)
+            _precipitation(c, condition, banks)
+
     stamp = now.strftime("%a %-d %b").upper()
     placement = str(params.get("date", "sky"))
 
@@ -189,6 +313,18 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         # night it drew straight through the moon phase label below.
         c.text(c.width // 2, HORIZON - 6, stamp,
                dim("white", 0.55 if daytime else 0.7), small, "center")
+
+    # The caption goes on after the weather: a cloud drifting over the date
+    # is atmospheric right up until you cannot read it.
+    stamp = now.strftime("%a %-d %b").upper()
+    placement = str(params.get("date", "sky"))
+    caption = dim("white", 0.5 if daytime else 0.6)
+    if greyness > 0.4 and daytime:
+        caption = dim("white", 0.75)      # legible against a grey sky
+    if placement == "sky":
+        c.text(3, 2, stamp, caption, small)
+    elif placement == "horizon":
+        c.text(c.width // 2, HORIZON - 6, stamp, caption, small, "center")
 
     if bool(params.get("times", True)):
         # A dark backing keeps the times readable when the sun is sitting on
