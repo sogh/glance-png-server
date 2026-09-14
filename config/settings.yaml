@@ -188,6 +188,20 @@ sources:
       live_refresh: 60
       poll_refresh: 21600     # the poll moves once a week, not once a minute
 
+    # The Mariners, through the same panel as everything else.
+    #
+    # `provider: mlb` wraps `sources.baseball` above rather than replacing it:
+    # statsapi carries the current half-inning and a broadcast listing per
+    # side, so a road game still says Mariners.TV rather than the home team's
+    # network. ESPN's own MLB endpoint would have been simpler and is not used
+    # -- a team's schedule there is 162 games and 2.8 MB.
+    mariners:
+      provider: mlb
+      teams: "SEA"
+      label: MARINERS
+      refresh: 600
+      live_refresh: 60
+
     # The WPBL played its first season in 2026. Nobody carries it -- ESPN's
     # API has twelve baseball leagues and this is not one of them -- so this
     # reads the league's own site, whose games are a WordPress custom post
@@ -346,8 +360,12 @@ channels:
         count: 0              # as many as the strip takes
     - scene: scores
       params:
-        board: wpbl
+        board: mariners
         accent: sky
+    - scene: scores
+      params:
+        board: wpbl
+        accent: mint
 
   # Everything in one slot, if you would rather not use four.
   main:

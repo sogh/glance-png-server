@@ -481,13 +481,20 @@ def test_the_board_asks_the_source_every_time(polled):
 
 # --- crests -----------------------------------------------------------------
 
-def crest_store(tmp_path, keys):
-    """A LogoStore pre-filled with solid squares for `keys`."""
+def crest_store(tmp_path, keys, sizes=(14, 16)):
+    """A LogoStore pre-filled with solid squares for `keys`.
+
+    Filled at every size a panel asks for: the scoreline leaves room for names
+    and wants 14, the ranking list wants 16, and a store holding only one of
+    them silently falls back to text.
+    """
     from PIL import Image
     from glance.sources.logos import LogoStore
     store = LogoStore(tmp_path, size=16)
     for key in keys:
-        Image.new("RGB", (16, 16), (220, 60, 60)).save(store._rendered(key))
+        for size in sizes:
+            Image.new("RGB", (size, size), (220, 60, 60)).save(
+                store._rendered(key, size))
     return store
 
 
@@ -524,7 +531,9 @@ def test_both_logos_are_requested_even_though_one_miss_decides_it(app, espn, tmp
     asked: list[str] = []
 
     class Spy:
-        def get(self, key, urls):
+        size = 14
+
+        def get(self, key, urls, size=None):
             asked.append(key)
             return None
 
@@ -657,3 +666,93 @@ def test_the_crest_scoreline_shows_a_ranking(app, espn, tmp_path):
     _result_crests(plain, fixture, crests, "amber", get_font("3x5"), "NCAA", False)
     assert fixture.home.rank == 19
     assert ranked.image.get_flattened_data() != plain.image.get_flattened_data()
+
+
+# --- the crest scoreline layout ---------------------------------------------
+
+def crest_ctx(app, espn, tmp_path):
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-WASH", "espn-USU"])
+    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=espn, label="NCAA")}
+    return ctx
+
+
+def bands(canvas):
+    """The horizontal strips that have any ink in them."""
+    rows = [y for y in range(canvas.height)
+            if any(canvas.image.getpixel((x, y)) != (0, 0, 0)
+                   for x in range(canvas.width))]
+    if not rows:
+        return []
+    out, start, prev = [], rows[0], rows[0]
+    for y in rows[1:]:
+        if y > prev + 1:
+            out.append((start, prev))
+            start = y
+        prev = y
+    out.append((start, prev))
+    return out
+
+
+def test_the_scoreline_stacks_crest_then_name_then_next(app, espn, tmp_path):
+    c = REGISTRY["scores"].render(crest_ctx(app, espn, tmp_path), {"board": "ncaa"})
+    assert len(bands(c)) == 3, bands(c)
+    crest, names, nxt = bands(c)
+    assert crest[0] == 0
+    assert names[0] > crest[1]
+    assert nxt[0] > names[1]
+
+
+def test_the_next_fixture_sits_to_the_right_under_the_crests(app, espn, tmp_path):
+    """Moved down and right: the result is the headline, the next fixture is
+    the footnote."""
+    c = REGISTRY["scores"].render(crest_ctx(app, espn, tmp_path), {"board": "ncaa"})
+    row = bands(c)[-1]
+    lit = [x for x in range(c.width) for y in range(row[0], row[1] + 1)
+           if c.image.getpixel((x, y)) != (0, 0, 0)]
+    assert max(lit) > c.width - 12, "should reach the right edge"
+    assert min(lit) > c.width // 3, "should not start at the left margin"
+
+
+def test_names_can_be_turned_off(app, espn, tmp_path):
+    ctx = crest_ctx(app, espn, tmp_path)
+    scene = REGISTRY["scores"]
+    with_names = scene.render(ctx, {"board": "ncaa"})
+    without = scene.render(ctx, {"board": "ncaa", "names": False})
+    assert len(bands(with_names)) == 3
+    assert len(bands(without)) == 2
+
+
+def test_a_name_too_wide_for_its_column_gives_way_to_the_abbreviation():
+    """"LOS ANGE..." tells you less than "LA"."""
+    from glance.fonts import get_font
+    from glance.scenes.scores import name_for
+
+    font = get_font("3x5")
+    side = Side("LA", "Los Angeles")
+    wide = font.measure("LOS ANGELES")
+    assert name_for(side, wide, font) == "LOS ANGELES"
+    assert name_for(side, wide - 1, font) == "LA"
+    # And nothing is ever half a name.
+    assert "…" not in name_for(side, 4, font)
+
+
+def test_a_team_with_no_long_name_uses_its_abbreviation():
+    from glance.fonts import get_font
+    from glance.scenes.scores import name_for
+    assert name_for(Side("SEA", ""), 999, get_font("3x5")) == "SEA"
+
+
+def test_a_crest_smaller_than_the_score_does_not_push_the_digits_off_the_top(app, espn, tmp_path):
+    """The score is drawn at double height. A 10px crest is shorter than that,
+    and centring on the crest alone hung the digits above y=0."""
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-WASH", "espn-USU"], sizes=(10, 14))
+    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=espn, label="NCAA")}
+    scene = REGISTRY["scores"]
+    for size in (10, 14):
+        c = scene.render(ctx, {"board": "ncaa", "crest": size})
+        top = bands(c)[0]
+        assert top[0] == 0
+        # Three bands means crest+score, names and next are still distinct.
+        assert len(bands(c)) == 3, (size, bands(c))

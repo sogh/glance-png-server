@@ -42,9 +42,10 @@ device ──GET /c/<channel>.png──▶ server
 MLB says `abstractGameState`, ESPN says `STATUS_FINAL`, the WPBL's WordPress
 says `final`. Each source translates into `sources/scores.py::Fixture` and a
 single `scores` scene draws all of them, so a new league is a config entry.
-MLB keeps its bespoke source and scene because statsapi carries the current
-half-inning and per-side broadcast feeds that the neutral shape has no room
-for.
+MLB is adapted rather than rewritten: `sources/mlb.py` is a thin translation
+over `sources/baseball.py`, which keeps statsapi's half-inning and its
+per-side broadcast choice. The older bespoke `baseball` scene still exists and
+is now superseded by `scores`.
 
 The followed team is stored **on each fixture**, not once on the snapshot.
 Follow two teams and the last result and the next fixture routinely belong to

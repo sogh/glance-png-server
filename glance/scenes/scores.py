@@ -69,6 +69,9 @@ def day_of(fixture, now) -> str:
               Param("rank", "bool", True, help="Show poll rankings where there are any"),
               Param("logos", "bool", True,
                     help="Draw team logos when they read at this size"),
+              Param("crest", "number", 14, minimum=8, maximum=24,
+                    help="Crest size on the scoreline"),
+              Param("names", "bool", True, help="Short team names under the scores"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -99,20 +102,25 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     if snap["live"]:
         return _live(c, snap["live"], accent, small, show_tv, tag, show_rank)
 
-    crests = _crests(ctx, snap["last"]) if params.get("logos", True) else None
+    size = int(params.get("crest", 14) or 14)
+    crests = (_crests(ctx, snap["last"], size) if params.get("logos", True)
+              else None)
 
-    y = 2
+    y, align = 2, "left"
     if snap["last"] and crests:
-        # The logo row is 16px tall, so it displaces the text scoreline rather
-        # than sharing its 5px strip.
-        _result_crests(c, snap["last"], crests, accent, small, tag, show_rank)
-        y = 17
+        # The crest block is far taller than a line of text, so it displaces
+        # the scoreline rather than sharing its 5px strip, and what follows
+        # sits under it and to the right -- the result reads first, the next
+        # fixture second.
+        y = _result_crests(c, snap["last"], crests, accent, small, tag,
+                           show_rank, bool(params.get("names", True)))
+        align = "right"
     elif snap["last"]:
         _result(c, snap["last"], ctx.now, y, accent, small, tag, show_rank)
         y += 11
     if snap["next"]:
         _next(c, snap["next"], ctx.now, y, accent, small, show_tv, show_rank,
-              tag if not snap["last"] else "", following)
+              tag if not snap["last"] else "", following, align)
     elif snap["last"] and show_tv and snap["last"].broadcast:
         c.text(2, y + 2, snap["last"].broadcast, dim("grey", 0.85), small,
                max_width=c.width - 4)
@@ -193,7 +201,7 @@ def _has_winner(fixture) -> bool:
     return fixture.away.winner or fixture.home.winner
 
 
-def _crests(ctx, fixture):
+def _crests(ctx, fixture, size=None):
     """Both logos, or nothing.
 
     All or nothing on purpose: one crest beside one abbreviation reads as a
@@ -206,59 +214,90 @@ def _crests(ctx, fixture):
     # Ask for both before judging. Returning early on the first miss would
     # only ever queue one download per refresh, so a fresh cache took a
     # refresh per team to fill instead of one for the pair.
-    pair = [store.get(side.key or side.abbrev, side.logo) if side.logo else None
+    pair = [store.get(side.key or side.abbrev, side.logo, size) if side.logo else None
             for side in (fixture.away, fixture.home)]
     return pair if all(p is not None for p in pair) else None
 
 
-def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True):
-    """The finished game as two crests and two scores.
+def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
+                   names=True):
+    """The finished game as two crests, two scores and two names.
 
-    A poll ranking, where there is one, goes immediately left of the crest --
-    the crest says who, the number says where they stand.
+    Returns the y the next line should start at. Each team is one column --
+    rank, crest, score on top, name centred underneath -- because a name
+    hanging off the side of its own crest belongs to nobody in particular.
     """
     big = get_font("5x7")
     size = crests[0].height
     top = 0
     gap = 3                 # crest to its own score
     between = 14            # one team to the other
+    # The score is drawn at double height, which is taller than a small crest.
+    # The row is as tall as whichever wins, and both are centred in it, or a
+    # 10px crest leaves the digits hanging off the top of the panel.
+    row = max(size, big.height * 2)
 
     sides = (fixture.away, fixture.home)
     ranks = [str(s.rank) if show_rank and s.ranked else "" for s in sides]
     lead = [small.measure(r) + 2 if r else 0 for r in ranks]
     widths = [big.measure("" if s.score is None else str(s.score)) * 2 for s in sides]
-    block = sum(lead) + sum(size + gap + w for w in widths) + between
+    columns = [pad + size + gap + w for pad, w in zip(lead, widths)]
+    block = sum(columns) + between
 
-    # Centre in what is actually left after the board name, rather than in the
-    # full width -- otherwise the group drifts right and leaves a gutter.
+    # Centre in what is left after the board name, rather than in the full
+    # width -- otherwise the group drifts right and leaves a gutter.
     reserved = (small.measure(tag[:8]) + 6) if tag else 6
     x = max(2, 2 + (c.width - reserved - 2 - block) // 2)
 
-    for side, crest, width, rank, pad in zip(sides, crests, widths, ranks, lead):
+    for side, crest, width, rank, pad, column in zip(sides, crests, widths,
+                                                     ranks, lead, columns):
+        left = x
         if rank:
-            c.text(x, top + (size - small.height) // 2, rank, dim(accent, 0.85), small)
+            c.text(x, top + (row - small.height) // 2, rank, dim(accent, 0.85), small)
             x += pad
-        c.blit(crest, x, top)
+        c.blit(crest, x, top + (row - size) // 2)
         x += size + gap
         if side.score is not None:
             colour = ("green" if side.winner
                       else dim("white", 0.55) if _has_winner(fixture)
                       else "white")
-            c.text(x, top + (size - big.height * 2) // 2, str(side.score),
+            c.text(x, top + (row - big.height * 2) // 2, str(side.score),
                    colour, big, "left", None, 2)
-        x += width + between
+        x += width
 
-    # The board name sits top right and the result under it, so the crests
-    # keep the left of the strip to themselves.
+        if names:
+            # A name may lean into the gap either side of its column; at this
+            # size "Washington" does not fit inside 39 pixels and clipping it
+            # to "Washingt" helps nobody.
+            room = column + between - 4
+            c.text(left + column // 2, top + row + 1, name_for(side, room, small),
+                   dim("white", 0.8), small, "center", room)
+        x += between
+
     if tag:
         c.text(c.width - 2, top + 1, tag[:8], dim(accent, 0.75), small, "right")
     won = fixture.won()
     if won is not None:
-        c.text(c.width - 2, top + size - small.height - 1, "W" if won else "L",
+        c.text(c.width - 2, top + row - small.height - 1, "W" if won else "L",
                "green" if won else dim("white", 0.55), small, "right")
+    return row + (small.height + 3 if names else 2)
 
 
-def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag, following):
+def name_for(side, room: int, font) -> str:
+    """The name to put under a crest.
+
+    The short name if it fits, otherwise the abbreviation -- "LOS ANGE..."
+    tells you less than "LA", so a name that will not fit gives way entirely
+    rather than being cut off.
+    """
+    name = (side.name or "").strip().upper()
+    if name and font.measure(name) <= room:
+        return name
+    return side.abbrev.upper()
+
+
+def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag,
+          following, align="left"):
     """The next fixture: when, against whom, and where to watch."""
     big = get_font("5x7")
     mine, opponent = fixture.mine(), fixture.opponent()
@@ -279,6 +318,21 @@ def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag, following)
 
     label = tag or "NEXT"
     label_w = small.measure(label) + 5
+
+    if align == "right":
+        # Under the crests and pushed right: the result is the headline, the
+        # next fixture is the footnote. One line, so the broadcast joins it
+        # rather than claiming a row of its own there is no room for.
+        if show_tv and fixture.broadcast:
+            headline = f"{headline}  {fixture.broadcast}"
+        room = c.width - 4 - label_w
+        text = small.truncate(headline, room)
+        width = small.measure(text)
+        left = max(2 + label_w, c.width - 2 - width)
+        c.text(left - label_w, y, label, dim(accent, 0.8), small)
+        c.text(left, y, text, "white", small)
+        return
+
     c.text(2, y + 2, label, dim(accent, 0.8), small)
     c.text(2 + label_w, y, headline, "white", big, "left",
            c.width - 4 - label_w, 1)

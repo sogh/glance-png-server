@@ -147,12 +147,13 @@ class LogoStore:
             self.last_error = f"{key}: {type(exc).__name__}: {exc}"
             return path if path.exists() else None
 
-    def _rendered(self, key: str) -> Path:
-        return self.dir / f"{_slug(key)}-{self.size}.png"
+    def _rendered(self, key: str, size: int | None = None) -> Path:
+        return self.dir / f"{_slug(key)}-{size or self.size}.png"
 
     # --- api ----------------------------------------------------------------
 
-    def get(self, key: str, urls: str | Iterable[str]) -> Image.Image | None:
+    def get(self, key: str, urls: str | Iterable[str],
+            size: int | None = None) -> Image.Image | None:
         """The panel-ready logo for `key`, or None if it is not ready yet.
 
         **Never blocks on the network.** The device gives up on a fetch after
@@ -171,26 +172,32 @@ class LogoStore:
         if not urls:
             return None
 
-        memo_key = f"{key}:{self.size}"
+        # Panels want different sizes -- a scoreline leaves room for names
+        # under the crests, a ranking list does not -- so the size travels
+        # with the request. The downloaded original is shared between them;
+        # only the reduced copy differs.
+        size = max(MIN_SIZE, int(size)) if size else self.size
+        memo_key = f"{key}:{size}"
         with self._lock:
             if memo_key in self._memo:
                 return self._memo[memo_key]
-            cached = self._from_disk(key)
+            cached = self._from_disk(key, size)
             if cached is not None:
                 self._memo[memo_key] = cached
                 return cached
-            if self._missing(key):
+            if self._missing(key, size):
                 self._memo[memo_key] = None
                 return None
             if memo_key not in self._pending:
                 self._pending.add(memo_key)
-                threading.Thread(target=self._fetch_later, args=(memo_key, key, urls),
+                threading.Thread(target=self._fetch_later,
+                                 args=(memo_key, key, urls, size),
                                  daemon=True, name=f"logo-{_slug(key)}").start()
         return None
 
-    def _fetch_later(self, memo_key: str, key: str, urls: list[str]) -> None:
+    def _fetch_later(self, memo_key: str, key: str, urls: list[str], size: int) -> None:
         try:
-            result = self._build(key, urls)
+            result = self._build(key, urls, size)
         except Exception as exc:  # noqa: BLE001 - a background thread must not die loudly
             # Warning, not info: this thread is the only thing that ever runs
             # this code, so a bug in it is otherwise completely silent -- the
@@ -202,8 +209,8 @@ class LogoStore:
             self._memo[memo_key] = result
             self._pending.discard(memo_key)
 
-    def _from_disk(self, key: str) -> Image.Image | None:
-        rendered = self._rendered(key)
+    def _from_disk(self, key: str, size: int | None = None) -> Image.Image | None:
+        rendered = self._rendered(key, size)
         if not rendered.exists():
             return None
         try:
@@ -213,10 +220,13 @@ class LogoStore:
             rendered.unlink(missing_ok=True)
             return None
 
-    def _missing(self, key: str) -> bool:
+    def _missing(self, key: str, size: int | None = None) -> bool:
         """Whether this team is already known to have no usable logo."""
-        marker = self.dir / f"{_slug(key)}-{self.size}.none"
+        marker = self._marker(key, size)
         return marker.exists() and time.time() - marker.stat().st_mtime < RAW_TTL
+
+    def _marker(self, key: str, size: int | None = None) -> Path:
+        return self.dir / f"{_slug(key)}-{size or self.size}.none"
 
     @property
     def pending(self) -> int:
@@ -224,15 +234,15 @@ class LogoStore:
         with self._lock:
             return len(self._pending)
 
-    def _build(self, key: str, urls: list[str]) -> Image.Image | None:
+    def _build(self, key: str, urls: list[str], size: int | None = None) -> Image.Image | None:
         """Download, reduce and test. Runs on a background thread."""
-        cached = self._from_disk(key)
+        size = size or self.size
+        cached = self._from_disk(key, size)
         if cached is not None:
             return cached
         # A marker, so a team with no usable logo is not re-fetched and
         # re-tested on every render.
-        miss = self.dir / f"{_slug(key)}-{self.size}.none"
-        if self._missing(key):
+        if self._missing(key, size):
             return None
 
         best: Image.Image | None = None
@@ -243,7 +253,7 @@ class LogoStore:
                 continue
             try:
                 with Image.open(path) as source:
-                    candidate = reduce_to(source, self.size)
+                    candidate = reduce_to(source, size)
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"{key}: {type(exc).__name__}: {exc}"
                 continue
@@ -255,11 +265,11 @@ class LogoStore:
             return None
         finished = normalise(best)
         if ink(finished) < MIN_INK:
-            log.info("logo %s does not read at %dpx; using text", key, self.size)
-            miss.touch()
+            log.info("logo %s does not read at %dpx; using text", key, size)
+            self._marker(key, size).touch()
             return None
         try:
-            finished.save(self._rendered(key))
+            finished.save(self._rendered(key, size))
         except OSError:
             pass          # caching is a nicety
         return finished

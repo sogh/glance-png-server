@@ -24,6 +24,7 @@ from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
 from .sources.espn import EspnSource
 from .sources.logos import LogoStore
+from .sources.mlb import MlbSource
 from .sources.modes import ModeSet
 from .sources.scores import Board
 from .sources.wpbl import WpblSource
@@ -140,6 +141,8 @@ class GlanceApp:
                                     **common)
             elif provider == "wpbl":
                 source = WpblSource(**common)
+            elif provider == "mlb":
+                source = MlbSource(**common)
             else:
                 log.warning("scoreboard %r: unknown provider %r", name, provider)
                 continue

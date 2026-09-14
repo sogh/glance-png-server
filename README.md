@@ -880,7 +880,7 @@ channels:
 
 | Key | Meaning |
 |---|---|
-| `provider` | `espn` for any league ESPN carries, `wpbl` for the Women's Pro Baseball League |
+| `provider` | `espn` for any league ESPN carries, `mlb` for Major League Baseball, `wpbl` for the Women's Pro Baseball League |
 | `league` | ESPN only: the `<sport>/<league>` path, e.g. `football/college-football`, `basketball/mens-college-basketball` |
 | `teams` | Comma-separated abbreviations. Empty follows the whole league — sensible for the WPBL's four clubs, silly for a hundred NCAA programmes |
 | `top` | Also follow the top N of a poll. A standing instruction, not a list to maintain — the membership changes weekly and the board follows it |
@@ -892,10 +892,34 @@ once, and named teams keep their place at the front as the poll churns. If the
 poll can't be fetched the board falls back to the cached one, then to just the
 named teams: a poll outage costs you the extra teams, not the panel.
 
-The panel shows **the last result and the next fixture together**, same as the
-MLB one, and hands the whole strip to a game in progress. Poll rankings are
+The panel shows **the last result and the next fixture together**, and hands
+the whole strip to a game in progress.
+
+With crests it is laid out in columns — rank, crest and score on top, the
+short team name centred underneath — and the next fixture moves **down and to
+the right**, because the result is the headline and what is coming is the
+footnote. A name that will not fit its column gives way to the abbreviation
+rather than being cut off: `LOS ANGE…` tells you less than `LA`. Turn the
+names off with `names: false`, or change the crest size with `crest: 16`.
+
+Without crests it falls back to a text scoreline, where poll rankings are
 drawn in the accent colour so `19 WASH 16` reads as a ranked team and a score
 rather than as two numbers.
+
+#### MLB keeps its own source
+
+`provider: mlb` wraps `sources.baseball` rather than replacing it, because
+statsapi knows two things nothing else does: the current half-inning, and
+which broadcast a fan of *your* team would turn on. Every game lists a feed
+for both sides, so a Mariners road game says `Mariners.TV` and not the home
+network — printing the first listing in the array is wrong half the time.
+
+ESPN's own MLB endpoint would have been simpler and is not used: a team's
+schedule there is 162 games and 2.8 MB, where statsapi answers a three-day
+window in a few kilobytes. Its **logos** are worth having though, and those
+are addressed by the lowercase abbreviation. statsapi and ESPN agree on 29 of
+the 30 — Arizona is `AZ` in one and `ari` in the other, which is the whole of
+`LOGO_SLUG`.
 
 #### ESPN: use the per-team endpoint, and don't set a User-Agent
 
