@@ -244,10 +244,13 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
     columns = [pad + size + gap + w for pad, w in zip(lead, widths)]
     block = sum(columns) + between
 
-    # Centre in what is left after the board name, rather than in the full
-    # width -- otherwise the group drifts right and leaves a gutter.
-    reserved = (small.measure(tag[:8]) + 6) if tag else 6
-    x = max(2, 2 + (c.width - reserved - 2 - block) // 2)
+    # The board name sits top LEFT. The panel scrolls, so the left edge is
+    # what is read first and the label belongs where the eye lands, not
+    # trailing off the far end.
+    left_margin = (2 + small.measure(tag[:8]) + 6) if tag else 2
+    right_margin = small.measure("W") + 4 if fixture.won() is not None else 2
+    room = c.width - left_margin - right_margin
+    x = max(left_margin, left_margin + (room - block) // 2)
 
     for side, crest, width, rank, pad, column in zip(sides, crests, widths,
                                                      ranks, lead, columns):
@@ -275,10 +278,11 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
         x += between
 
     if tag:
-        c.text(c.width - 2, top + 1, tag[:8], dim(accent, 0.75), small, "right")
+        c.text(2, top + 1, tag[:8], dim(accent, 0.75), small)
     won = fixture.won()
     if won is not None:
-        c.text(c.width - 2, top + row - small.height - 1, "W" if won else "L",
+        c.text(c.width - 2, top + (row - small.height) // 2,
+               "W" if won else "L",
                "green" if won else dim("white", 0.55), small, "right")
     return row + (small.height + 3 if names else 2)
 

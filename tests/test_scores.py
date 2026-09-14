@@ -756,3 +756,21 @@ def test_a_crest_smaller_than_the_score_does_not_push_the_digits_off_the_top(app
         assert top[0] == 0
         # Three bands means crest+score, names and next are still distinct.
         assert len(bands(c)) == 3, (size, bands(c))
+
+
+def test_the_board_name_sits_top_left(app, espn, tmp_path):
+    """The panel scrolls, so the left edge is read first and the label belongs
+    where the eye lands rather than trailing off the far end."""
+    scene = REGISTRY["scores"]
+    ctx = crest_ctx(app, espn, tmp_path)
+    labelled = scene.render(ctx, {"board": "ncaa"})
+    bare = scene.render(ctx, {"board": "ncaa", "label": False})
+
+    def ink_in(canvas, x0, x1, y0, y1):
+        return sum(1 for x in range(x0, x1) for y in range(y0, y1)
+                   if canvas.image.getpixel((x, y)) != (0, 0, 0))
+
+    top = bands(labelled)[0]
+    # The label adds ink to the top-left corner and nothing to the top-right.
+    assert ink_in(labelled, 0, 34, top[0], top[0] + 6) > ink_in(bare, 0, 34, top[0], top[0] + 6)
+    assert ink_in(labelled, 158, 192, top[0], top[0] + 3) == 0
