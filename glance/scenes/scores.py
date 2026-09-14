@@ -45,17 +45,64 @@ def clock(fixture) -> str:
 
 
 def day_of(fixture, now) -> str:
-    """'' for today, 'SAT' for later this week, 'SEP 19' beyond that."""
+    """'TODAY', 'TMRW', 'SAT' later this week, 'SEP 19' beyond that.
+
+    Today used to render as an empty string, on the reasoning that a bare time
+    obviously means today. It does not: "AT LAA 6:38P" reads as a fixture on
+    some unstated day, and the one thing worth knowing about a game is whether
+    you can watch it tonight.
+    """
     if not fixture.start:
         return ""
     days = (fixture.start.date() - now.date()).days
     if days <= 0:
-        return ""
+        return "TODAY"
     if days == 1:
         return "TMRW"
     if days < 7:
         return fixture.start.strftime("%a").upper()
     return fixture.start.strftime("%b %-d").upper()
+
+
+def _runs(fixture, now, show_rank, following, accent, today_colour, show_tv):
+    """The next-fixture line as coloured runs.
+
+    The day is drawn in its own colour so it separates from the matchup and
+    the time without any punctuation -- at this size a separator costs as much
+    width as a word.
+    """
+    mine, opponent = fixture.mine(), fixture.opponent()
+    if opponent is None or following == 0:
+        # Following the whole league: there is no "us", so name both sides.
+        matchup = f"{fixture.away.label(show_rank)} V {fixture.home.label(show_rank)}"
+    else:
+        # "AT"/"VS" rather than "@": the at-sign is a dense knot of pixels at
+        # this size and reads as a smudge, where two letters are unambiguous.
+        at = "AT" if fixture.side_for() == "away" else "VS"
+        # With more than one team followed, "AT DUQ" does not say who is
+        # playing -- the last result and the next fixture routinely belong to
+        # different teams.
+        who = f"{mine.abbrev} " if following > 1 and mine is not None else ""
+        matchup = f"{who}{at} {opponent.label(show_rank)}"
+
+    out = [(matchup, "white")]
+    day = day_of(fixture, now)
+    if day:
+        out.append((day, today_colour if day == "TODAY" else accent))
+    out.append((clock(fixture), "white"))
+    if show_tv and fixture.broadcast:
+        out.append((fixture.broadcast, dim("grey", 0.85)))
+    return out
+
+
+def _measure_runs(runs, font, gap: int) -> int:
+    return sum(font.measure(t) for t, _ in runs) + gap * (len(runs) - 1)
+
+
+def _draw_runs(c, x: int, y: int, runs, font, gap: int, scale: int = 1) -> int:
+    for text, colour in runs:
+        x += c.text(x, y, text, colour, font, "left", None, scale) + gap
+    return x
 
 
 @register("scores", available=_available,
@@ -72,6 +119,8 @@ def day_of(fixture, now) -> str:
               Param("crest", "number", 14, minimum=8, maximum=24,
                     help="Crest size on the scoreline"),
               Param("names", "bool", True, help="Short team names under the scores"),
+              Param("today_color", "color", "green", options="@colors",
+                    help="Colour for TODAY on the next-fixture line"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -120,7 +169,8 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         y += 11
     if snap["next"]:
         _next(c, snap["next"], ctx.now, y, accent, small, show_tv, show_rank,
-              tag if not snap["last"] else "", following, align)
+              tag if not snap["last"] else "", following, align,
+              str(params.get("today_color", "green")))
     elif snap["last"] and show_tv and snap["last"].broadcast:
         c.text(2, y + 2, snap["last"].broadcast, dim("grey", 0.85), small,
                max_width=c.width - 4)
@@ -249,8 +299,12 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
     # trailing off the far end.
     left_margin = (2 + small.measure(tag[:8]) + 6) if tag else 2
     right_margin = small.measure("W") + 4 if fixture.won() is not None else 2
-    room = c.width - left_margin - right_margin
-    x = max(left_margin, left_margin + (room - block) // 2)
+
+    # Centred on the PANEL, not on the gap between the label and the result --
+    # centring on the gap let a long label shove the crests right, so MARINERS
+    # sat noticeably further over than WPBL. Clamped so it still clears both.
+    x = max(left_margin, min((c.width - block) // 2,
+                             c.width - right_margin - block))
 
     for side, crest, width, rank, pad, column in zip(sides, crests, widths,
                                                      ranks, lead, columns):
@@ -301,25 +355,9 @@ def name_for(side, room: int, font) -> str:
 
 
 def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag,
-          following, align="left"):
+          following, align="left", today_colour="green"):
     """The next fixture: when, against whom, and where to watch."""
     big = get_font("5x7")
-    mine, opponent = fixture.mine(), fixture.opponent()
-    when = " ".join(x for x in (day_of(fixture, now), clock(fixture)) if x)
-
-    if opponent is None or following == 0:
-        # Following the whole league: there is no "us", so name both sides.
-        headline = f"{fixture.away.label(show_rank)} V {fixture.home.label(show_rank)}  {when}"
-    else:
-        # "AT"/"VS" rather than "@": the at-sign is a dense knot of pixels at
-        # this size and reads as a smudge, where two letters are unambiguous.
-        at = "AT" if fixture.side_for() == "away" else "VS"
-        # With more than one team followed, "AT DUQ" does not say who is
-        # playing -- the last result and the next fixture routinely belong to
-        # different teams.
-        who = f"{mine.abbrev} " if following > 1 and mine is not None else ""
-        headline = f"{who}{at} {opponent.label(show_rank)}  {when}"
-
     label = tag or "NEXT"
     label_w = small.measure(label) + 5
 
@@ -327,19 +365,20 @@ def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag,
         # Under the crests and pushed right: the result is the headline, the
         # next fixture is the footnote. One line, so the broadcast joins it
         # rather than claiming a row of its own there is no room for.
-        if show_tv and fixture.broadcast:
-            headline = f"{headline}  {fixture.broadcast}"
-        room = c.width - 4 - label_w
-        text = small.truncate(headline, room)
-        width = small.measure(text)
+        runs = _runs(fixture, now, show_rank, following, accent, today_colour, show_tv)
+        gap = 4
+        while len(runs) > 1 and _measure_runs(runs, small, gap) > c.width - 4 - label_w:
+            runs.pop()          # drop the broadcast, then the day, to fit
+        width = _measure_runs(runs, small, gap)
         left = max(2 + label_w, c.width - 2 - width)
         c.text(left - label_w, y, label, dim(accent, 0.8), small)
-        c.text(left, y, text, "white", small)
+        _draw_runs(c, left, y, runs, small, gap)
         return
 
+    runs = _runs(fixture, now, show_rank, following, accent, today_colour, False)
+    gap = 5
     c.text(2, y + 2, label, dim(accent, 0.8), small)
-    c.text(2 + label_w, y, headline, "white", big, "left",
-           c.width - 4 - label_w, 1)
+    _draw_runs(c, 2 + label_w, y, runs, big, gap)
 
     if show_tv and fixture.broadcast:
         tv_y = y + big.height + 3

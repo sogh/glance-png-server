@@ -902,6 +902,21 @@ footnote. A name that will not fit its column gives way to the abbreviation
 rather than being cut off: `LOS ANGE…` tells you less than `LA`. Turn the
 names off with `names: false`, or change the crest size with `crest: 16`.
 
+The board name sits **top left**: the panel scrolls, so that is where the eye
+lands, and a label trailing off the far end is read last or not at all. The
+crest block centres on the panel rather than on the space left beside the
+label, or a long name like `MARINERS` shoves it visibly further right than a
+short one like `WPBL`.
+
+On the next-fixture line the **day is drawn in its own colour** — `TODAY` in
+green (`today_color`), any other day in the accent — so it separates from the
+matchup and the time without punctuation, which at this size costs as much
+width as a word. Today used to render as an empty string on the reasoning
+that a bare time obviously means today; it does not. `AT LAA 6:38P` reads as a
+fixture on some unstated day, and whether you can watch it tonight is the one
+thing worth knowing. If the line will not fit, the broadcast is dropped first
+and the day second — the matchup and the time are what must survive.
+
 Without crests it falls back to a text scoreline, where poll rankings are
 drawn in the accent colour so `19 WASH 16` reads as a ranked team and a score
 rather than as two numbers.

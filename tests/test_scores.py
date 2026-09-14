@@ -774,3 +774,95 @@ def test_the_board_name_sits_top_left(app, espn, tmp_path):
     # The label adds ink to the top-left corner and nothing to the top-right.
     assert ink_in(labelled, 0, 34, top[0], top[0] + 6) > ink_in(bare, 0, 34, top[0], top[0] + 6)
     assert ink_in(labelled, 158, 192, top[0], top[0] + 3) == 0
+
+
+# --- placement and the day word ---------------------------------------------
+
+def test_the_crest_block_does_not_move_when_the_label_is_longer(app):
+    """Centring on the gap between the label and the result let a long board
+    name shove the crests right, so MARINERS sat noticeably further over than
+    WPBL. They centre on the panel now."""
+    from PIL import Image
+    from glance.canvas import Canvas
+    from glance.fonts import get_font
+    from glance.scenes.scores import _result_crests
+
+    crests = [Image.new("RGB", (14, 14), (200, 0, 0))] * 2
+    done = fixture("LA", "NY", 7, 9, FINAL)
+
+    def first_crest_x(tag):
+        c = Canvas(width=192)
+        _result_crests(c, done, crests, "amber", get_font("3x5"), tag, True, False)
+        # The crests are the only pure red thing on the panel.
+        return min(x for x in range(192) for y in range(14)
+                   if c.image.getpixel((x, y)) == (200, 0, 0))
+
+    assert first_crest_x("WPBL") == first_crest_x("MARINERS")
+
+
+def test_a_long_label_still_never_overlaps_the_crests(app):
+    from PIL import Image
+    from glance.canvas import Canvas
+    from glance.fonts import get_font
+    from glance.scenes.scores import _result_crests
+
+    crests = [Image.new("RGB", (14, 14), (200, 0, 0))] * 2
+    wide = fixture("AAA", "BBB", 100, 100, FINAL)
+    c = Canvas(width=192)
+    font = get_font("3x5")
+    _result_crests(c, wide, crests, "amber", font, "MARINERS", True, False)
+    first = min(x for x in range(192) for y in range(14)
+                if c.image.getpixel((x, y)) == (200, 0, 0))
+    assert first >= 2 + font.measure("MARINERS") + 6
+
+
+def test_a_game_today_says_so(app):
+    from glance.scenes.scores import day_of
+    assert day_of(fixture(hours=3), NOW) == "TODAY"
+    assert day_of(fixture(hours=26), NOW) == "TMRW"
+    assert day_of(fixture(hours=24 * 3), NOW) in ("WED", "THU", "FRI")
+    assert day_of(fixture(hours=24 * 20), NOW).startswith("OCT")
+
+
+def test_today_used_to_be_blank_and_that_was_the_bug(app):
+    """A bare time reads as a fixture on some unstated day, and whether you
+    can watch it tonight is the one thing worth knowing."""
+    from glance.scenes.scores import day_of
+    assert day_of(fixture(hours=3), NOW) != ""
+
+
+def test_the_day_is_drawn_in_its_own_colour(app):
+    from glance.fonts import get_font
+    from glance.scenes.scores import _runs
+
+    today = _runs(fixture("LAA", "SEA", state=PRE, hours=3), NOW, True, 1,
+                  "amber", "green", False)
+    words = dict((t, c) for t, c in today)
+    assert "TODAY" in words
+    assert words["TODAY"] == "green"
+    # The matchup and the time stay white, so the day is what stands out.
+    assert [c for t, c in today if t != "TODAY"] == ["white", "white"]
+
+
+def test_another_day_is_drawn_in_the_accent(app):
+    from glance.scenes.scores import _runs
+    later = _runs(fixture("DUQ", "WSU", state=PRE, hours=24 * 5), NOW, True, 1,
+                  "amber", "green", False)
+    day = [c for t, c in later if t not in ("white",)][1]
+    assert day == "amber"
+
+
+def test_the_broadcast_is_dropped_before_the_line_overflows(app):
+    """Something has to give on a 192px strip. The broadcast goes first, then
+    the day -- the matchup and the time are the part that must survive."""
+    from glance.canvas import Canvas
+    from glance.fonts import get_font
+    from glance.scenes.scores import _next
+
+    long_tv = fixture("LAA", "SEA", state=PRE, hours=3)
+    long_tv.broadcast = "A VERY LONG REGIONAL SPORTS NETWORK NAME INDEED"
+    c = Canvas(width=192)
+    _next(c, long_tv, NOW, 20, "amber", get_font("3x5"), True, True, "", 1,
+          align="right")
+    edge = [c.image.getpixel((c.width - 1, y)) for y in range(20, 32)]
+    assert all(sum(p) == 0 for p in edge), "ran off the right edge"
