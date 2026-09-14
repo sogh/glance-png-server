@@ -135,6 +135,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
             return sorted(REGISTRY)
         if marker == "@calendars":
             return glance.calendars.names
+        if marker == "@languages":
+            return glance.vocabulary.languages
         if marker == "@boards":
             return sorted(glance.scoreboards)
         if marker == "@entities":

@@ -267,6 +267,67 @@ and the second steps aside. Supported by `todos` and `agenda`.
 
 ---
 
+## `language` — a word at a time
+
+A vocabulary panel for Spanish, French, or any deck you write. Decks live in
+`config/vocabulary/<code>.yaml`:
+
+```yaml
+label: ESPANOL
+words:
+  - "el año = the year"           # the short form
+  - "¿Cómo estás? = How are you?"
+  - term: buenos días             # the long form, when you want a hint
+    gloss: good morning
+    note: BWEH-nos DEE-as
+```
+
+```yaml
+channels:
+  learn:
+    - scene: language
+      params: { language: es, rotate: 900, label: true, feminine_color: pink }
+```
+
+| Key | Meaning |
+|---|---|
+| `rotate` | Seconds each word holds before the next |
+| `shuffle` | Reshuffle daily rather than run the file in order |
+| `reveal` | Hide the meaning until this far through the slot; `0` shows it throughout |
+| `article_color` / `feminine_color` | The gender-carrying article, drawn apart |
+
+**The accents are real.** The 5x7 font grew a composed set of diacritics for
+this, because `el año` is the year and `el ano` is not, and a panel that
+quietly renders the second one is worse than no panel at all. Marks are
+composed rather than hand-drawn: a lowercase letter occupies rows 2–6 of the
+cell, leaving two rows free above it, and a capital makes room by dropping one
+of a repeated interior row — `A` is `.###.` over `#...#` three times, and
+losing one still reads as an A. `¿` and `¡` are literally `?` and `!` turned
+through 180°.
+
+Folding is now **font-aware**: a font with the glyph keeps it, one without it
+still folds. That distinction matters — stripping the accent is right for a
+calendar entry typed with a stray diacritic and wrong here. The 3x5 font is
+uppercase-only with no room above a letter, so it still folds; the panel draws
+foreign text in 5x7.
+
+**The article is coloured separately** because gender is what beginners get
+wrong for years, and `la`/`el` in different colours puts it on every card for
+nothing. `feminine_color` splits them further.
+
+**On what this is not.** Real spaced repetition needs to know what you got
+wrong, and a panel on a wall cannot ask. This is *scheduled exposure*: each
+entry gets a slot, the deck cycles, and seeing a word ten times over a week is
+what does the work. `reveal` adds a recall gap — the term shows, the meaning
+arrives later in the slot — but nothing here adapts to you, and calling it an
+SRS would be a lie with a nice name on it.
+
+The word is picked from the clock rather than from stored state, so it
+survives a restart, never double-advances on a device retry, and two panels
+pointed at the same deck agree.
+
+---
+
 ## Modes — a calendar event that changes what the panels show
 
 Put an event on the calendar called **`Farm tour #visitors`**. For exactly as
@@ -370,6 +431,7 @@ an entry actually mentions one, and at most once per request.
 | `banner` | Title card — big line, small line, evergreens | always |
 | `scores` | Result + next fixture from a configured scoreboard | the board has a game |
 | `rankings` | The top of a poll, as many as fit | the poll is available |
+| `language` | A word in another language, and what it means | the deck has words |
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |

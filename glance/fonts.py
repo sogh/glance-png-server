@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import lru_cache
+from typing import Any
 
 from PIL import Image
 
@@ -208,17 +209,24 @@ TRANSLITERATE = {
 }
 
 
-def to_ascii(text: str) -> str:
-    """Fold text onto what a 5x7 ASCII font can actually draw.
+def to_ascii(text: str, keep: Any = ()) -> str:
+    """Fold text onto what the font can actually draw.
 
     Known punctuation is mapped explicitly; accented letters are stripped to
-    their base form (so "Renée" draws as "Renee" rather than "Ren??").
+    their base form, so "Renée" draws as "Renee" rather than "Ren??".
+
+    `keep` is the set of characters the font has glyphs for, and they are left
+    alone. That distinction matters: folding is right for a calendar entry
+    typed with a stray diacritic, and wrong for a vocabulary panel, where
+    "año" and "ano" are different words and only one of them is "year".
     """
     import unicodedata
 
     out = []
     for ch in text:
-        if ch in TRANSLITERATE:
+        if ch in keep:
+            out.append(ch)
+        elif ch in TRANSLITERATE:
             out.append(TRANSLITERATE[ch])
         elif ord(ch) < 128:
             out.append(ch)
@@ -294,14 +302,14 @@ class BitmapFont:
 
     def measure(self, text: str) -> int:
         """Width in pixels, excluding the trailing tracking gap."""
-        text = to_ascii(text)
+        text = to_ascii(text, self.source)
         if not text:
             return 0
         return sum(self.advance(c) for c in text) - self.tracking
 
     def mask(self, text: str) -> Image.Image:
         """A 1-bit mask of the text, sized exactly to the inked extent."""
-        text = to_ascii(text)
+        text = to_ascii(text, self.source)
         width = max(self.measure(text), 1)
         img = Image.new("1", (width, self.height), 0)
         if not text:
@@ -319,7 +327,7 @@ class BitmapFont:
 
     def truncate(self, text: str, max_width: int, marker: str = "…") -> str:
         """Shorten text to fit, appending an ellipsis when anything is dropped."""
-        text = to_ascii(text)
+        text = to_ascii(text, self.source)
         if self.measure(text) <= max_width:
             return text
         marker_w = self.measure(marker)
@@ -340,7 +348,7 @@ class BitmapFont:
         """Greedy word wrap; words longer than a line are hard-split."""
         lines: list[str] = []
         current = ""
-        for word in to_ascii(text).split():
+        for word in to_ascii(text, self.source).split():
             candidate = f"{current} {word}" if current else word
             if self.measure(candidate) <= max_width:
                 current = candidate
@@ -359,6 +367,106 @@ class BitmapFont:
             lines.append(current)
         return lines
 
+
+
+# --- accented letters ------------------------------------------------------
+#
+# A vocabulary panel has to draw "año" and not "ano": the accent is part of
+# the word, and in Spanish the difference between those two is not a nuance.
+# So rather than hand-authoring forty glyphs, they are composed.
+#
+# Lowercase is the easy half. A lowercase letter occupies rows 2-6 of the 5x7
+# cell, so rows 0 and 1 are already free for a mark to sit in.
+#
+# Uppercase fills all seven rows, so room has to be made. Most capitals repeat
+# an interior row -- A is ".###." then "#...#" twice -- and dropping one of a
+# duplicate pair shortens the letter without changing what it reads as. Two of
+# those frees the two rows a mark needs.
+
+MARKS = {
+    "acute":      ("...#.", "..#.."),
+    "grave":      (".#...", "..#.."),
+    "circumflex": ("..#..", ".#.#."),
+    "diaeresis":  (".....", ".#.#."),
+    "tilde":      (".##.#", "#..#."),
+}
+
+# The letter each accented character is built from, and the mark on it.
+ACCENTED = {
+    "á": ("a", "acute"),   "é": ("e", "acute"),   "í": ("i", "acute"),
+    "ó": ("o", "acute"),   "ú": ("u", "acute"),   "ý": ("y", "acute"),
+    "à": ("a", "grave"),   "è": ("e", "grave"),   "ì": ("i", "grave"),
+    "ò": ("o", "grave"),   "ù": ("u", "grave"),
+    "â": ("a", "circumflex"), "ê": ("e", "circumflex"), "î": ("i", "circumflex"),
+    "ô": ("o", "circumflex"), "û": ("u", "circumflex"),
+    "ä": ("a", "diaeresis"), "ë": ("e", "diaeresis"), "ï": ("i", "diaeresis"),
+    "ö": ("o", "diaeresis"), "ü": ("u", "diaeresis"), "ÿ": ("y", "diaeresis"),
+    "ñ": ("n", "tilde"),   "ã": ("a", "tilde"),   "õ": ("o", "tilde"),
+}
+
+# i and j carry a dot that a mark has to replace, or the two collide.
+DOTLESS = {"i": ".....;.....;.##..;..#..;..#..;..#..;.###.".replace(";", "/"),
+           "j": ".....;.....;...#.;...#.;...#.;#..#.;.##..".replace(";", "/")}
+
+
+def _rows(glyph: str) -> list[str]:
+    return glyph.split("/")
+
+
+def _shorten(rows: list[str], to: int) -> list[str]:
+    """Drop repeated interior rows until the letter is `to` rows tall.
+
+    A capital A is ".###." over "#...#" three times; losing one of those still
+    reads as an A, where cropping the top or bottom does not.
+    """
+    rows = list(rows)
+    while len(rows) > to:
+        for i in range(len(rows) - 1):
+            if rows[i] == rows[i + 1]:
+                del rows[i]
+                break
+        else:
+            del rows[-1]        # nothing repeats; the baseline is least missed
+    return rows
+
+
+def _accented(base: str, mark: str, upper: bool) -> str:
+    top = MARKS[mark]
+    if upper:
+        letter = _shorten(_rows(FONT_5X7_GLYPHS[base.upper()]), 5)
+    else:
+        source = DOTLESS.get(base, FONT_5X7_GLYPHS[base])
+        letter = _rows(source)[2:]
+    return "/".join(list(top) + letter)
+
+
+for _ch, (_base, _mark) in ACCENTED.items():
+    FONT_5X7_GLYPHS[_ch] = _accented(_base, _mark, upper=False)
+    FONT_5X7_GLYPHS[_ch.upper()] = _accented(_base, _mark, upper=True)
+
+# The cedilla hangs below the baseline, which the cell has no room for, so the
+# letter shifts up a row to make it.
+# The whole letter moves up a row; taking a slice off its bottom instead
+# leaves a c with no curve, which reads as "c." with a speck under it.
+FONT_5X7_GLYPHS["ç"] = "/".join(["....."]
+                                + _rows(FONT_5X7_GLYPHS["c"])[2:] + ["..#.."])
+FONT_5X7_GLYPHS["Ç"] = "/".join(_shorten(_rows(FONT_5X7_GLYPHS["C"]), 6) + ["..#.."])
+
+# A ligature, not a composition.
+FONT_5X7_GLYPHS["œ"] = "...../...../.####/#.#.#/#.###/#.#../.####"
+FONT_5X7_GLYPHS["Œ"] = ".####/#.#../#.###/#.#../#.#../#.#../.####"
+FONT_5X7_GLYPHS["ß"] = "...../...../.###./#...#/####./#...#/#.##."
+
+# Spanish opens a question or an exclamation with the mark upside down, which
+# is exactly what it looks like: the same glyph turned through 180 degrees.
+def _rotated(glyph: str) -> str:
+    return "/".join("".join(reversed(row)) for row in reversed(_rows(glyph)))
+
+
+FONT_5X7_GLYPHS["¿"] = _rotated(FONT_5X7_GLYPHS["?"])
+FONT_5X7_GLYPHS["¡"] = _rotated(FONT_5X7_GLYPHS["!"])
+FONT_3X5_GLYPHS["¿"] = _rotated(FONT_3X5_GLYPHS["?"])
+FONT_3X5_GLYPHS["¡"] = _rotated(FONT_3X5_GLYPHS["!"])
 
 FONT_5X7 = BitmapFont("5x7", FONT_5X7_GLYPHS, cell_width=5, height=7, space_width=2)
 FONT_3X5 = BitmapFont(

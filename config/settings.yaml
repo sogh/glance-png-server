@@ -367,6 +367,29 @@ channels:
         board: wpbl
         accent: mint
 
+  # A word at a time. Its own slot on purpose: what teaches a language is
+  # seeing the same word ten times over a week, and a panel that comes round
+  # once an hour does that better than one buried in a rotation.
+  #
+  # Decks live in config/vocabulary/*.yaml -- add your own, delete what you
+  # already know. A shorter deck means each word comes round more often.
+  #
+  # `reveal: 0.5` turns it into a recall test: the meaning stays hidden for
+  # the first half of each word's slot. Leave it at 0 to always show both.
+  learn:
+    - scene: language
+      params:
+        language: es
+        rotate: 900           # seconds per word
+        label: true
+        feminine_color: pink  # "la" and "una" apart from "el" and "un"
+    - scene: language
+      params:
+        language: fr
+        rotate: 900
+        label: true
+        feminine_color: pink
+
   # Everything in one slot, if you would rather not use four.
   main:
     - scene: holiday

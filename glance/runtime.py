@@ -33,6 +33,7 @@ from .sources.homeassistant import HomeAssistantSource
 from .sources.instagram import InstagramSource
 from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
+from .sources.vocabulary import Vocabulary
 
 log = logging.getLogger("glance")
 
@@ -62,6 +63,7 @@ class GlanceApp:
         self.baseball = self._build_baseball(settings)
         self.homeassistant = self._build_ha(settings)
         self.scoreboards = self._build_scoreboards(settings)
+        self.vocabulary = Vocabulary(settings.vocabulary_dir)
         self.logos = LogoStore(settings.cache_dir,
                                size=int((settings.raw.get("panel") or {}).get("logo_size", 16)))
         self._holidays: list[Holiday] = []
@@ -341,6 +343,7 @@ class GlanceApp:
             holidays=self.holidays,
             scoreboards=self.scoreboards,
             logos=self.logos,
+            vocabulary=self.vocabulary,
             mode_set=self.modes,
         )
 
@@ -432,6 +435,7 @@ class GlanceApp:
                 ],
             },
             "sources": {
+                "vocabulary": self.vocabulary.status(),
                 "calendars": self.calendars.status(ctx.now),
                 "weather": {
                     "configured": self.weather.configured,

@@ -22,7 +22,7 @@ device ──GET /c/<channel>.png──▶ server
 | Module | Does |
 |---|---|
 | `canvas.py` | The drawing surface. Rects, discs, text, gradients, PNG encoding. |
-| `fonts.py` | Three hand-authored bitmap fonts and their layout. |
+| `fonts.py` | Three hand-authored bitmap fonts, composed diacritics, and layout. |
 | `palette.py` | LED-safe colours, PWM floor snapping, mixing. |
 | `sprites.py` | Pixel art as editable character grids. |
 | `weathericons.py` | Weather glyphs drawn from primitives. |
@@ -37,6 +37,16 @@ device ──GET /c/<channel>.png──▶ server
 | `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram, modes, scoreboards. |
 
 ## Decisions worth knowing
+
+**Accents are composed, not drawn.** A lowercase 5x7 letter sits in rows 2-6,
+so the two rows above it are free for a mark. A capital fills all seven and
+makes room by dropping one of a repeated interior row, which shortens the
+letter without changing what it reads as. That turns forty hand-authored
+glyphs into two tables and a rule.
+
+`to_ascii` takes the font's own glyph set and leaves those characters alone.
+Folding an accent away is right for a calendar entry and wrong for a
+vocabulary panel, where "año" and "ano" are different words.
 
 **Scoreboards share one vocabulary.** Every provider speaks its own dialect --
 MLB says `abstractGameState`, ESPN says `STATUS_FINAL`, the WPBL's WordPress

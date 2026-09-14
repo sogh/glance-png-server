@@ -67,6 +67,7 @@ class Settings:
     static_dir: Path = PROJECT_ROOT / "assets" / "static"
     cache_dir: Path = PROJECT_ROOT / "data" / "cache"
     holidays_file: Path = PROJECT_ROOT / "config" / "holidays.yaml"
+    vocabulary_dir: Path = PROJECT_ROOT / "config" / "vocabulary"
     todos_file: Path = PROJECT_ROOT / "data" / "reminders.json"
     ics_url: str = ""                          # legacy single-calendar form
     calendars: dict[str, Any] = field(default_factory=dict)
@@ -164,6 +165,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         ("static_dir", "static_dir"),
         ("cache_dir", "cache_dir"),
         ("holidays_file", "holidays_file"),
+        ("vocabulary_dir", "vocabulary_dir"),
     ):
         if key in paths:
             setattr(s, attr, s.resolve(paths[key]))

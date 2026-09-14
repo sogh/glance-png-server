@@ -1,0 +1,121 @@
+# Spanish starter deck.
+#
+# Add your own, delete what you already know. The panel cycles the whole file,
+# so a shorter deck means each word comes round more often.
+#
+#   - term: el año          what the panel shows big
+#     gloss: the year       what it means
+#     note: AH-nyo          optional: a pronunciation hint or a usage note
+#
+# The short form "el año = the year" works too.
+#
+# Accents matter and the font has them: "el año" is the year, "el ano" is
+# not. Type the real word.
+label: ESPANOL
+words:
+
+  # --- greetings and courtesy ---
+  - "hola = hello"
+  - term: buenos días
+    gloss: good morning
+    note: BWEH-nos DEE-as
+  - "buenas tardes = good afternoon"
+  - "buenas noches = good night"
+  - "adiós = goodbye"
+  - "hasta luego = see you later"
+  - "por favor = please"
+  - "gracias = thank you"
+  - "de nada = you're welcome"
+  - "lo siento = I'm sorry"
+  - "con permiso = excuse me"
+  - "¿Cómo estás? = How are you?"
+  - "muy bien = very well"
+  - "¿Qué tal? = How's it going?"
+  - "mucho gusto = pleased to meet you"
+
+  # --- people ---
+  - "la mujer = the woman"
+  - "el hombre = the man"
+  - "la niña = the girl"
+  - "el niño = the boy"
+  - "la familia = the family"
+  - "el amigo = the friend"
+  - "la vecina = the neighbour"
+  - "la gente = the people"
+
+  # --- the farm and the garden ---
+  - "la granja = the farm"
+  - "el huerto = the vegetable garden"
+  - "el jardín = the garden"
+  - "el árbol = the tree"
+  - "la flor = the flower"
+  - "la semilla = the seed"
+  - "la tierra = the soil"
+  - "la lluvia = the rain"
+  - "el pollo = the chicken"
+  - "el pato = the duck"
+  - "el huevo = the egg"
+  - "la vaca = the cow"
+  - "la abeja = the bee"
+  - "la miel = the honey"
+  - "el invernadero = the greenhouse"
+
+  # --- food ---
+  - "el pan = the bread"
+  - "el queso = the cheese"
+  - "la manzana = the apple"
+  - "la fresa = the strawberry"
+  - "el tomate = the tomato"
+  - "la cebolla = the onion"
+  - "el ajo = the garlic"
+  - "la comida = the food"
+  - "el desayuno = breakfast"
+  - "la cena = dinner"
+  - "el agua = the water"
+  - "el café = the coffee"
+  - "tengo hambre = I'm hungry"
+
+  # --- time ---
+  - "hoy = today"
+  - "mañana = tomorrow"
+  - "ayer = yesterday"
+  - "el año = the year"
+  - "la semana = the week"
+  - "el día = the day"
+  - "la noche = the night"
+  - "ahora = now"
+  - "siempre = always"
+  - "temprano = early"
+
+  # --- weather ---
+  - "hace frío = it's cold"
+  - "hace calor = it's hot"
+  - "está lloviendo = it's raining"
+  - "el sol = the sun"
+  - "la luna = the moon"
+  - "la nieve = the snow"
+  - "el viento = the wind"
+
+  # --- useful verbs ---
+  - "ser = to be (permanent)"
+  - "estar = to be (temporary)"
+  - "tener = to have"
+  - "hacer = to do, to make"
+  - "ir = to go"
+  - "querer = to want"
+  - "poder = to be able"
+  - "saber = to know"
+  - "comer = to eat"
+  - "beber = to drink"
+  - "trabajar = to work"
+  - "vivir = to live"
+
+  # --- getting by ---
+  - "no entiendo = I don't understand"
+  - "¿Dónde está? = Where is it?"
+  - "¿Cuánto cuesta? = How much does it cost?"
+  - "más despacio = more slowly"
+  - "¿Hablas inglés? = Do you speak English?"
+  - "otra vez = again"
+  - "tal vez = maybe"
+  - "claro que sí = of course"
