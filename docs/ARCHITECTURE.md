@@ -35,9 +35,24 @@ device ──GET /c/<channel>.png──▶ server
 | `editor.py` | The `/edit` page. |
 | `artstore.py` | Uploading and validating artwork. |
 | `scenes/` | One module per scene. A render function plus a param schema. |
-| `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram. |
+| `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram, modes. |
 
 ## Decisions worth knowing
+
+**Modes are calendar-driven, not a button.** A toggle needs two presses and
+the second one — days later, once the visitors have gone — is the one that
+gets forgotten. An event carries its own end time, so the panel un-does
+itself. `sources/modes.py` decides which modes are in force; `when: {mode: x}`
+on a channel entry consumes it.
+
+Working it out costs a calendar parse, so `RenderContext.modes` is lazy and
+memoised for the life of one request, and `Carousel.candidates` only asks when
+an entry's `when` actually mentions a mode. A feature most panels never touch
+should not tax every render.
+
+Mode detection deliberately sees `#hide` events, which every other reader
+skips. Hiding the trigger event from the agenda is a reasonable thing to want,
+and it would be baffling if that also silently disarmed the mode.
 
 **Bitmap fonts, hand-authored.** At 32px tall, anti-aliased TrueType turns to
 grey mush — every glyph edge becomes a half-lit LED. The glyphs are editable

@@ -30,14 +30,29 @@ from .scenes.base import RenderContext, Scene, resolve
 WEEKDAY_NAMES = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
 
-def matches_when(when: dict[str, Any], now: datetime) -> bool:
-    """Evaluate a channel entry's optional time window.
+def _wanted(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {v.strip() for v in value.split(",") if v.strip()}
+    return {str(v).strip() for v in value if str(v).strip()}
+
+
+def matches_when(when: dict[str, Any], now: datetime,
+                 modes: frozenset[str] = frozenset()) -> bool:
+    """Evaluate a channel entry's optional condition.
 
     Supported keys: months, weekdays, hours (list or {from,to}), dates
-    ("MM-DD"), from/to ("HH:MM"). An empty condition always matches.
+    ("MM-DD"), from/to ("HH:MM"), mode, not_mode. An empty condition always
+    matches.
     """
     if not when:
         return True
+
+    # `mode` is any-of, `not_mode` is none-of, so a single entry can say "while
+    # visitors are here" or "any time they are not".
+    if "mode" in when and not (_wanted(when["mode"]) & set(modes)):
+        return False
+    if "not_mode" in when and (_wanted(when["not_mode"]) & set(modes)):
+        return False
 
     if "months" in when and now.month not in [int(m) for m in when["months"]]:
         return False
@@ -139,7 +154,13 @@ class Carousel:
         """Entries that are enabled, in their time window, and have content."""
         out: list[Selection] = []
         for entry in self.settings.channels.get(channel, []):
-            if not entry.enabled or not matches_when(entry.when, ctx.now):
+            # ctx.modes costs a calendar parse, so only ask when an entry
+            # actually mentions one.
+            if not entry.enabled:
+                continue
+            needs_modes = "mode" in entry.when or "not_mode" in entry.when
+            if not matches_when(entry.when, ctx.now,
+                                ctx.modes if needs_modes else frozenset()):
                 continue
             scene, params = resolve(entry.ref, entry.params)
             if scene is None:

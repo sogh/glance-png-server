@@ -53,9 +53,11 @@ class CalendarSource:
         timeout: float = 10.0,
         name: str = "",
         default_style: Style | None = None,
+        mode_words: frozenset[str] = frozenset(),
     ) -> None:
         self.url = url
         self.name = name
+        self.mode_words = mode_words
         self.default_style = default_style or Style()
         self.tz = tz
         self.refresh = refresh
@@ -115,7 +117,8 @@ class CalendarSource:
         anchor = dtime(23, 59, 59) if end_of_day else dtime(0, 0)
         return datetime.combine(value, anchor, tzinfo=self.tz), True
 
-    def events(self, now: datetime, lookahead_days: int = 14) -> list[Event]:
+    def events(self, now: datetime, lookahead_days: int = 14,
+               include_hidden: bool = False) -> list[Event]:
         text = self.raw_ics()
         if not text:
             return []
@@ -142,9 +145,12 @@ class CalendarSource:
                 end = start + timedelta(days=1) if all_day else start + timedelta(hours=1)
             raw = str(occ.get("SUMMARY", "(no title)")).strip()
             description = str(occ.get("DESCRIPTION", "") or "")
-            clean, style = style_for(raw, description)
-            # `#hide` is how you keep something in the calendar but off the panel.
-            if style.hidden:
+            clean, style = style_for(raw, description, self.mode_words)
+            # `#hide` is how you keep something in the calendar but off the
+            # panel. Mode detection still wants to see it: hiding the event
+            # that arms a mode is a reasonable thing to want, and it would be
+            # baffling if that also silently stopped the mode from firing.
+            if style.hidden and not include_hidden:
                 continue
             out.append(
                 Event(
@@ -162,10 +168,12 @@ class CalendarSource:
             e.style = e.style.merged_over(self.default_style)
         return sorted(out, key=lambda e: e.start)
 
-    def upcoming(self, now: datetime, lookahead_days: int = 14, include_current: bool = True) -> list[Event]:
+    def upcoming(self, now: datetime, lookahead_days: int = 14,
+                 include_current: bool = True,
+                 include_hidden: bool = False) -> list[Event]:
         """Events still relevant: in progress, or yet to start."""
         return [
-            e for e in self.events(now, lookahead_days)
+            e for e in self.events(now, lookahead_days, include_hidden)
             if e.end > now and (include_current or e.start >= now)
         ]
 

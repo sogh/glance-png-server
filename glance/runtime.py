@@ -23,6 +23,7 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.modes import ModeSet
 from .sources.baseball import BaseballSource
 from .sources.homeassistant import HomeAssistantSource
 from .sources.instagram import InstagramSource
@@ -41,8 +42,12 @@ class GlanceApp:
         self._snapshot_mtimes()
         self.carousel = Carousel(settings)
         self.todos = TodoSource(settings.todos_file)
+        # Built before the calendars, which need its tag words so a mode tag
+        # is stripped out of the titles they draw.
+        self.modes = ModeSet(settings.modes)
         self.calendars = CalendarSet(
-            settings.calendars, settings.cache_dir, settings.tz, settings.ics_refresh
+            settings.calendars, settings.cache_dir, settings.tz, settings.ics_refresh,
+            mode_words=self.modes.tag_words,
         )
         # Kept for scenes and callers that just want "the" calendar.
         first = next(iter(self.calendars.sources.values()), None)
@@ -175,9 +180,13 @@ class GlanceApp:
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
-            if calendars_changed:
+            modes_changed = fresh.modes != self.settings.modes
+            if modes_changed:
+                self.modes = ModeSet(fresh.modes)
+            if calendars_changed or modes_changed:
                 self.calendars = CalendarSet(
-                    fresh.calendars, fresh.cache_dir, fresh.tz, fresh.ics_refresh
+                    fresh.calendars, fresh.cache_dir, fresh.tz, fresh.ics_refresh,
+                    mode_words=self.modes.tag_words,
                 )
                 first = next(iter(self.calendars.sources.values()), None)
                 self.calendar = self.calendars.get("default") or first
@@ -282,6 +291,7 @@ class GlanceApp:
             homeassistant=self.homeassistant,
             todos=self.todos,
             holidays=self.holidays,
+            mode_set=self.modes,
         )
 
     def render_scene(self, ref: str, params: dict[str, Any] | None = None,
@@ -360,6 +370,10 @@ class GlanceApp:
                 "dwell": self.settings.carousel_dwell,
             },
             "channels": channels,
+            "modes": {
+                "active": sorted(ctx.modes),
+                "configured": self.modes.describe(ctx.now, self.calendars),
+            },
             "scenes": sorted(REGISTRY),
             "static_images": list_static(ctx),
             "holidays": {

@@ -256,7 +256,7 @@ tasks:
 With todos present those two alternate. With none, the first holds the slot
 and the second steps aside. Supported by `todos` and `agenda`.
 
-### The two modes
+### The two carousel modes
 
 - **`advance`** (default) — steps on each real fetch. Fetches closer together
   than `min_advance_interval` (default 30s) return the same scene, so a device
@@ -267,10 +267,107 @@ and the second steps aside. Supported by `todos` and `agenda`.
 
 ---
 
+## Modes — a calendar event that changes what the panels show
+
+Put an event on the calendar called **`Farm tour #visitors`**. For exactly as
+long as that event runs, every channel entry marked `when: {mode: visitors}`
+becomes available, and every entry marked `not_mode` drops out. When the event
+ends, the panels go back to normal on their own.
+
+This is deliberately not a button. A button has to be pressed twice — once to
+turn the thing on, and once, days later, to remember to turn it off. It's the
+second press that gets forgotten, and the panel spends a fortnight showing a
+welcome banner to nobody. An event has an end time, it can be scheduled a week
+ahead from a phone, and the thing you already do to plan a visit is the thing
+that arms it.
+
+```yaml
+modes:
+  visitors:
+    match: ["#visitors", "open house", "farm tour"]
+    calendars: agenda,events        # optional; omit to watch all of them
+```
+
+| Key | Meaning |
+|---|---|
+| `match` | What turns it on. Defaults to the mode's own name as a tag. |
+| `calendars` | Which feeds to watch. Omit for all. |
+| `enabled` | Set `false` to park a mode without deleting it. |
+
+**Matching** runs against the title exactly as you typed it.
+
+- `#visitors` matches a **tag** — `Sunday open day #visitors` fires,
+  `#visitorship` does not.
+- `open house` matches a **phrase**, case-insensitively and on word
+  boundaries — `Open House 2pm` fires, `reopen household budget` does not.
+- Several terms are *any of*.
+
+A `#tag` named here is stripped from the title before it's drawn, so the
+trigger event still reads as `Farm tour` wherever it shows up. Add `#hide` as
+well and it stays off the panels entirely **without** stopping the mode — the
+mode looks at hidden events on purpose, because wanting the trigger off your
+agenda is reasonable and it would be baffling if that quietly disarmed it.
+
+### Using one
+
+```yaml
+channels:
+  today:
+    - scene: banner
+      takeover: true
+      when: { mode: visitors }
+      params: { title: MAPLE FARM, subtitle: WELCOME, accent: mint }
+    - scene: columns            # what it goes back to
+      params: { calendar: agenda }
+```
+
+`takeover: true` means it pre-empts the rotation without disturbing where the
+rotation had got to, so the calendar picks up exactly where it left off.
+
+`mode` takes a list or a comma string and means *any of*; `not_mode` means
+*none of*. Both combine with the time conditions, so
+`when: {mode: visitors, hours: {from: 9, to: 17}}` is a daytime-only takeover.
+
+### Two slots at once
+
+If two channels both take over, they are two app slots the device shows one
+after the other — so the **same card twice reads as a bug**. Two ways out:
+
+**A matched pair** (recommended). Give each entry its own words. Each panel is
+complete on its own and they read as a set.
+
+**One sign across both.** Set `span: 2` on both entries, `part: 1` on the
+first and `part: 2` on the second. The banner is laid out once at double
+width and then cut, so a letter on the seam is split rather than drawn twice.
+Worth knowing before you commit to it: this only reads as one sign if the
+device *pans* between slots. If it cuts, each half is a broken word —
+`EVERGRE` then `EN FARM`.
+
+### Checking it
+
+```bash
+curl -s localhost:8080/api/status | jq .modes
+```
+
+```json
+{
+  "active": ["visitors"],
+  "configured": {
+    "visitors": { "active": true, "match": ["#visitors"], "calendars": "all" }
+  }
+}
+```
+
+Working out which modes are on costs a calendar parse, so it's only done when
+an entry actually mentions one, and at most once per request.
+
+---
+
 ## Scenes
 
 | Scene | Shows | Available when |
 |---|---|---|
+| `banner` | Title card — big line, small line, evergreens | always |
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |

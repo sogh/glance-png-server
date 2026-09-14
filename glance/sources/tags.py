@@ -70,8 +70,14 @@ def _apply(target: dict[str, Any], updates: dict[str, Any]) -> None:
         target.setdefault(k, v)
 
 
-def parse_tags(title: str) -> tuple[str, dict[str, Any]]:
-    """Pull known #tags out of a title. Returns (clean title, style values)."""
+def parse_tags(title: str, mode_words: frozenset[str] | set[str] = frozenset()
+               ) -> tuple[str, dict[str, Any]]:
+    """Pull known #tags out of a title. Returns (clean title, style values).
+
+    `mode_words` are the tags that arm a mode (see sources/modes.py). They
+    carry no styling, but they are stripped like any other keyword so an event
+    titled "Farm tour #visitors" draws as "Farm tour".
+    """
     found: dict[str, Any] = {}
     matched: list[str] = []
 
@@ -82,6 +88,8 @@ def parse_tags(title: str) -> tuple[str, dict[str, Any]]:
             matched.append(m.group(0))
         elif word in STYLE_WORDS:
             _apply(found, STYLE_WORDS[word])
+            matched.append(m.group(0))
+        elif word in mode_words:
             matched.append(m.group(0))
         # Unknown -- leave it in the title.
 
@@ -110,13 +118,14 @@ def parse_description(description: str) -> dict[str, Any]:
     return found
 
 
-def style_for(summary: str, description: str = "") -> tuple[str, Style]:
+def style_for(summary: str, description: str = "",
+              mode_words: frozenset[str] | set[str] = frozenset()) -> tuple[str, Style]:
     """Combine title tags and description keys into one Style.
 
     Title tags win over description keys -- the title is what you edit in a
     hurry on a phone.
     """
-    clean, from_title = parse_tags(summary)
+    clean, from_title = parse_tags(summary, mode_words)
     values = {**parse_description(description), **from_title}
     return clean, Style(
         color=values.get("color"),

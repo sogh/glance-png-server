@@ -1,8 +1,8 @@
 """Importing this package registers every built-in scene."""
 
-from . import (activity, agenda, baseball, basic, columns, entities,  # noqa: F401
-               holiday, instagram, marquee, pulse, sprite, static_image,
-               sky, todos, weather)
+from . import (activity, agenda, banner, baseball, basic, columns,  # noqa: F401
+               entities, holiday, instagram, marquee, pulse, sprite,
+               static_image, sky, todos, weather)
 from .base import (  # noqa: F401
     REGISTRY,
     FunctionScene,

@@ -26,6 +26,7 @@ class CalendarSet:
         cache_dir: Path,
         tz: ZoneInfo,
         default_refresh: int = 900,
+        mode_words: frozenset[str] = frozenset(),
     ) -> None:
         self.sources: dict[str, CalendarSource] = {}
         for name, spec in (specs or {}).items():
@@ -38,6 +39,7 @@ class CalendarSet:
                 tz=tz,
                 refresh=int(spec.get("refresh", default_refresh)),
                 name=name,
+                mode_words=mode_words,
                 default_style=Style(
                     color=spec.get("color"),
                     accent=spec.get("accent"),
@@ -72,11 +74,13 @@ class CalendarSet:
         names: str | Iterable[str] | None = None,
         lookahead_days: int = 14,
         include_current: bool = True,
+        include_hidden: bool = False,
     ) -> list[Event]:
         """Events from the selected calendars, merged and in time order."""
         merged: list[Event] = []
         for src in self._selected(names):
-            merged.extend(src.upcoming(now, lookahead_days, include_current))
+            merged.extend(src.upcoming(now, lookahead_days, include_current,
+                                       include_hidden))
         return sorted(merged, key=lambda e: e.start)
 
     def errors(self) -> dict[str, str]:

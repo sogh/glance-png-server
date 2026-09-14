@@ -166,6 +166,37 @@ sources:
   reminders_file:
     path: data/reminders.json
 
+# ---------------------------------------------------------------------------
+# Modes: a calendar event that changes what the panels show, while it runs.
+#
+# Put an event on the calendar called "Farm tour #visitors" and for exactly as
+# long as that event lasts, any channel entry marked `when: {mode: visitors}`
+# becomes available -- and any marked `not_mode` drops out. When the event
+# ends the panels go back to normal on their own.
+#
+# This is deliberately not a button. A button needs pressing twice, and it is
+# the second press, days later, that gets forgotten -- leaving a welcome
+# banner up for a fortnight. An event has an end time.
+#
+#   match     what turns it on. "#tag" matches a tag; a bare phrase matches
+#             case-insensitively on word boundaries, so "open house" fires on
+#             "Open House 2pm" but not on "reopen household budget".
+#             Defaults to the mode's own name as a tag.
+#   calendars which feeds to watch. Omit for all of them.
+#
+# A #tag listed here is stripped from the title before it is drawn, so the
+# trigger event still reads as "Farm tour" anywhere it shows up. Tagging it
+# `#hide` as well keeps it off the panels entirely without stopping the mode.
+#
+# Check what is on:  curl -s localhost:8080/api/status | jq .modes
+# ---------------------------------------------------------------------------
+modes:
+
+  # Someone is visiting. The calendar panels have nothing to say to a guest,
+  # so they hand their slots to a welcome banner -- see `channels` below.
+  visitors:
+    match: ["#visitors", "open house", "farm tour"]
+
 channels:
 
   # ---------------------------------------------------------------------
@@ -188,14 +219,38 @@ channels:
       takeover: true
     - scene: date
 
-  # What is left on the calendar today.
+  # What is left on the calendar today. While the visitors mode is on, the
+  # banner takes the slot instead -- a guest does not need our dentist
+  # appointment, and the rotation picks up where it left off afterwards.
   today:
+    - scene: banner
+      takeover: true
+      when: { mode: visitors }
+      params:
+        title: MAPLE FARM
+        subtitle: WELCOME
+        accent: mint
     - scene: today-agenda
       params:
         calendar: agenda
 
   # The next thing coming up, whenever it is.
+  #
+  # The visitors banner here is the second half of a matched PAIR, not a
+  # repeat: this slot and `today` above are two app slots the device shows one
+  # after the other, so the same card twice reads as a bug.
+  #
+  # The other way to do it is one sign laid across both -- set `span: 2` on
+  # both entries and `part: 1` there, `part: 2` here. That only reads if the
+  # device pans between slots; if it cuts, each half is a broken word.
   next:
+    - scene: banner
+      takeover: true
+      when: { mode: visitors }
+      params:
+        title: GLAD YOU CAME
+        subtitle: "@YOUR_ACCOUNT"
+        accent: amber
     - scene: agenda
       params:
         calendar: "agenda,events"

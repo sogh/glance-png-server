@@ -70,6 +70,7 @@ class Settings:
     todos_file: Path = PROJECT_ROOT / "data" / "reminders.json"
     ics_url: str = ""                          # legacy single-calendar form
     calendars: dict[str, Any] = field(default_factory=dict)
+    modes: dict[str, Any] = field(default_factory=dict)
     weather: dict[str, Any] = field(default_factory=dict)
     instagram: dict[str, Any] = field(default_factory=dict)
     baseball: dict[str, Any] = field(default_factory=dict)
@@ -146,6 +147,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         ics_url=str(cal.get("ics_url", "") or ""),
         ics_refresh=int(src.get("refresh", cal.get("refresh", 900))),
         calendars=dict(src.get("calendars", {}) or {}),
+        modes=dict(raw.get("modes", src.get("modes", {})) or {}),
         weather=dict(src.get("weather", {}) or {}),
         instagram=dict(src.get("instagram", {}) or {}),
         baseball=dict(src.get("baseball", {}) or {}),

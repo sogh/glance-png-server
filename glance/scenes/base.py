@@ -98,6 +98,27 @@ class RenderContext:
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None
     brightness: float | None = None   # None = use the schedule
+    mode_set: Any = None              # sources.modes.ModeSet
+    _modes: frozenset[str] | None = field(default=None, repr=False, compare=False)
+
+    @property
+    def modes(self) -> frozenset[str]:
+        """Modes in force right now -- see sources/modes.py.
+
+        Worked out on first use and remembered for the life of this context,
+        which is one request. Deciding costs a calendar parse, and most panels
+        never ask, so doing it eagerly would tax every render for a feature
+        most of them do not use.
+        """
+        if self._modes is None:
+            if self.mode_set is None:
+                self._modes = frozenset()
+            else:
+                try:
+                    self._modes = self.mode_set.active(self.now, self.calendars)
+                except Exception:  # noqa: BLE001 - never take the panel down
+                    self._modes = frozenset()
+        return self._modes
 
     @property
     def width(self) -> int:
