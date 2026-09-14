@@ -113,10 +113,17 @@ class EspnSource:
     def __init__(self, league: str = "football/college-football", teams: str = "",
                  tz: ZoneInfo | None = None, cache_dir: Path | None = None,
                  refresh: int = 900, live_refresh: int = 60,
-                 timeout: float = 12.0, name: str = "") -> None:
+                 timeout: float = 12.0, name: str = "",
+                 top: int = 0, poll: str = "ap", poll_refresh: int = 21600) -> None:
         self.league = str(league or "").strip("/ ")
         self.name = name or self.league
-        self.teams = [t.strip() for t in str(teams or "").split(",") if t.strip()]
+        self.fixed = [t.strip() for t in str(teams or "").split(",") if t.strip()]
+        # Follow the top N of a poll as well as (or instead of) named teams.
+        # The membership changes every week, which is the point -- "the top
+        # four" is a standing instruction, not a list to keep editing.
+        self.top = max(0, int(top or 0))
+        self.poll = str(poll or "ap").lower()
+        self.poll_refresh = poll_refresh
         self.tz = tz or ZoneInfo("UTC")
         self.refresh = refresh
         self.live_refresh = live_refresh
@@ -128,11 +135,78 @@ class EspnSource:
 
     @property
     def configured(self) -> bool:
-        return bool(self.league and self.teams)
+        return bool(self.league and (self.fixed or self.top))
+
+    @property
+    def teams(self) -> list[str]:
+        """Named teams first, then the current top N, without repeats.
+
+        Named first so a team that is both -- Georgia sitting at #2 -- is
+        fetched once and keeps its place, and so the list stays stable as the
+        poll churns underneath it.
+        """
+        out = list(self.fixed)
+        for abbrev in self.ranked():
+            if abbrev not in out:
+                out.append(abbrev)
+        return out
+
+    def ranked(self) -> list[str]:
+        """The top `top` abbreviations of the configured poll.
+
+        A failed fetch falls back to the cached poll, and then to nothing --
+        the named teams still work, so a poll outage costs the extra teams
+        rather than the whole panel.
+        """
+        if not self.top:
+            return []
+        path = self.rankings_file
+        payload = None
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                payload = None
+        stale = not path.exists() or time.time() - path.stat().st_mtime >= self.poll_refresh
+        if stale:
+            try:
+                resp = httpx.get(f"{BASE}/{self.league}/rankings", timeout=self.timeout)
+                resp.raise_for_status()
+                fresh = resp.json()
+                if isinstance(fresh, dict) and fresh.get("rankings"):
+                    path.write_text(json.dumps(fresh))
+                    payload = fresh
+            except Exception as exc:  # noqa: BLE001 - stale poll beats no poll
+                self.last_error = f"rankings: {type(exc).__name__}: {exc}"
+        if not payload:
+            return []
+
+        polls = payload.get("rankings") or []
+        chosen = next((p for p in polls if str(p.get("type", "")).lower() == self.poll), None)
+        if chosen is None:
+            chosen = polls[0] if polls else None
+        if chosen is None:
+            return []
+
+        out: list[str] = []
+        for entry in sorted(chosen.get("ranks") or [],
+                            key=lambda e: int(e.get("current") or 999)):
+            abbrev = str((entry.get("team") or {}).get("abbreviation") or "").strip()
+            if abbrev and abbrev not in out:
+                out.append(abbrev)
+            if len(out) >= self.top:
+                break
+        return out
+
+    def _slug(self, suffix: str) -> str:
+        return re.sub(r"[^A-Za-z0-9]+", "-", f"{self.league}-{suffix}").strip("-").lower()
 
     def _cache_file(self, team: str) -> Path:
-        slug = re.sub(r"[^A-Za-z0-9]+", "-", f"{self.league}-{team}").strip("-").lower()
-        return self.cache_dir / f"espn-{slug}.json"
+        return self.cache_dir / f"espn-{self._slug(team)}.json"
+
+    @property
+    def rankings_file(self) -> Path:
+        return self.cache_dir / f"espn-rankings-{self._slug(self.poll)}.json"
 
     def _ttl(self, payload: dict) -> int:
         """Poll hard only while something is actually being played."""

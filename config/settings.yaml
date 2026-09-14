@@ -163,16 +163,24 @@ sources:
   # ---------------------------------------------------------------------
   scoreboards:
 
-    # NCAA football. ESPN wants the team abbreviation -- WASH, WSU, OSU.
-    # Look one up at espn.com/college-football/team/_/id/<whatever>; the
-    # abbreviation is in the URL of the team page.
+    # NCAA football: Georgia, plus whoever is top of the AP poll this week.
+    #
+    # `top` is a standing instruction rather than a list to keep editing --
+    # the membership changes every Sunday and the board follows it. A team
+    # that is both named and ranked (Georgia at #2) is fetched once.
+    #
+    # ESPN wants the team abbreviation -- UGA, TEX, WASH. Look one up at
+    # espn.com/college-football/team/_/id/<whatever>; it is in the page URL.
     ncaa:
       provider: espn
       league: football/college-football
-      teams: "WASH,WSU"
+      teams: "UGA"
+      top: 4                  # ... and the current AP top 4
+      poll: ap                # ap | usa (coaches) | fcs
       label: NCAA
       refresh: 900            # college football is weekly; no need to hurry
       live_refresh: 60
+      poll_refresh: 21600     # the poll moves once a week, not once a minute
 
     # The WPBL played its first season in 2026. Nobody carries it -- ESPN's
     # API has twelve baseball leagues and this is not one of them -- so this
@@ -311,6 +319,20 @@ channels:
       params:
         count: 3
         header: true
+
+  # Scores. Both leagues share one slot and alternate on each refresh: the
+  # NCAA board is Georgia plus the AP top four, the WPBL board is all four
+  # clubs. Neither shows if it has nothing to say, so in February this slot
+  # is just the WPBL and in July it is just the NCAA.
+  scores:
+    - scene: scores
+      params:
+        board: ncaa
+        accent: amber
+    - scene: scores
+      params:
+        board: wpbl
+        accent: sky
 
   # Everything in one slot, if you would rather not use four.
   main:

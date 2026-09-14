@@ -131,14 +131,20 @@ class GlanceApp:
                           live_refresh=int(spec.get("live_refresh", 60)),
                           name=str(name))
             if provider == "espn":
-                source = EspnSource(league=str(spec.get("league", "")), **common)
+                source = EspnSource(league=str(spec.get("league", "")),
+                                    top=int(spec.get("top", 0) or 0),
+                                    poll=str(spec.get("poll", "ap")),
+                                    poll_refresh=int(spec.get("poll_refresh", 21600)),
+                                    **common)
             elif provider == "wpbl":
                 source = WpblSource(**common)
             else:
                 log.warning("scoreboard %r: unknown provider %r", name, provider)
                 continue
+            # The board asks the source for its team list rather than keeping
+            # its own copy, so a poll-driven board stays current as the poll
+            # moves instead of being frozen at whatever it was at startup.
             out[str(name)] = Board(name=str(name), source=source,
-                                   teams=[t.strip() for t in teams.split(",") if t.strip()],
                                    label=str(spec.get("label", "") or ""))
         return out
 

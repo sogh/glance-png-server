@@ -18,6 +18,29 @@ TZ = ZoneInfo("America/Los_Angeles")
 NOW = datetime(2026, 9, 14, 12, 0, tzinfo=TZ)
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Every test here must run off seeded cache files.
+
+    Without this a fixture written to the wrong cache path does not fail -- it
+    quietly reaches ESPN instead, and the suite starts depending on the
+    network, on the season, and on who is top of the poll this week. That
+    happened; hence the guard.
+
+    It patches httpx at each source module, which is the only way out of
+    these two. Blocking `socket.socket.connect` does not work -- httpx goes
+    through httpcore, which does not call it by that name.
+    """
+    import glance.sources.espn as espn_mod
+    import glance.sources.wpbl as wpbl_mod
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("this test tried to use the network")
+
+    for module in (espn_mod, wpbl_mod):
+        monkeypatch.setattr(module.httpx, "get", refuse)
+
+
 def fixture(away="AAA", home="HHH", a=None, h=None, state=PRE, hours=0, **kw) -> Fixture:
     return Fixture(away=Side(away, away, a), home=Side(home, home, h),
                    state=state, start=NOW + timedelta(hours=hours), **kw)
@@ -323,8 +346,7 @@ def test_a_board_turns_a_source_failure_into_no_snapshot(tmp_path):
 
 def test_the_scene_draws_a_board(app, espn):
     ctx = app.context(NOW, brightness=1.0)
-    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=espn, teams=["WASH"],
-                                     label="NCAA")}
+    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=espn, label="NCAA")}
     scene = REGISTRY["scores"]
     assert scene.available(ctx, {"board": "ncaa"})
     c = scene.render(ctx, {"board": "ncaa"})
@@ -349,7 +371,98 @@ def test_the_scene_is_unavailable_with_nothing_to_show_but_always_overrides(app,
                        tz=TZ, cache_dir=tmp_path)
     empty._cache_file("ZZZ").write_text(json.dumps({"events": []}))
     ctx = app.context(NOW, brightness=1.0)
-    ctx.scoreboards = {"x": Board(name="x", source=empty, teams=["ZZZ"])}
+    ctx.scoreboards = {"x": Board(name="x", source=empty)}
     scene = REGISTRY["scores"]
     assert not scene.available(ctx, {"board": "x"})
     assert scene.available(ctx, {"board": "x", "always": True})
+
+
+# --- following a poll -------------------------------------------------------
+
+def rankings_payload() -> dict:
+    def entry(rank, abbrev):
+        return {"current": rank, "team": {"abbreviation": abbrev}}
+    return {"rankings": [
+        {"name": "AFCA Coaches Poll", "type": "usa",
+         "ranks": [entry(1, "UGA"), entry(2, "TEX"), entry(3, "OSU")]},
+        {"name": "AP Top 25", "type": "ap",
+         # Deliberately out of order: the source must sort by rank, not trust
+         # the order the feed happens to arrive in.
+         "ranks": [entry(3, "ND"), entry(1, "TEX"), entry(4, "IU"),
+                   entry(2, "UGA"), entry(5, "MIA")]},
+    ]}
+
+
+@pytest.fixture
+def polled(tmp_path: Path) -> EspnSource:
+    src = EspnSource(league="football/college-football", teams="UGA", top=4,
+                     tz=TZ, cache_dir=tmp_path)
+    src.rankings_file.write_text(json.dumps(rankings_payload()))
+    return src
+
+
+def test_the_top_of_the_poll_is_read_in_rank_order(polled):
+    assert polled.ranked() == ["TEX", "UGA", "ND", "IU"]
+
+
+def test_a_named_team_that_is_also_ranked_is_followed_once(polled):
+    """Georgia sits at #2. Fetching it twice would cost a request and list the
+    same game twice."""
+    assert polled.teams == ["UGA", "TEX", "ND", "IU"]
+    assert polled.teams.count("UGA") == 1
+
+
+def test_the_named_teams_keep_their_place_as_the_poll_churns(polled):
+    assert polled.teams[0] == "UGA"
+
+
+def test_a_different_poll_can_be_chosen(tmp_path):
+    src = EspnSource(league="football/college-football", top=3, poll="usa",
+                     tz=TZ, cache_dir=tmp_path)
+    src.rankings_file.write_text(json.dumps(rankings_payload()))
+    assert src.ranked() == ["UGA", "TEX", "OSU"]
+
+
+def test_no_top_means_the_poll_is_never_fetched(tmp_path, monkeypatch):
+    import glance.sources.espn as mod
+    monkeypatch.setattr(mod.httpx, "get",
+                        lambda *a, **k: pytest.fail("fetched the poll for top=0"))
+    src = EspnSource(league="football/college-football", teams="WASH",
+                     tz=TZ, cache_dir=tmp_path)
+    assert src.ranked() == []
+    assert src.teams == ["WASH"]
+
+
+def test_a_poll_outage_costs_the_ranked_teams_not_the_panel(polled, monkeypatch):
+    import glance.sources.espn as mod
+    monkeypatch.setattr(mod.time, "time", lambda: 1e12)      # force it stale
+    monkeypatch.setattr(mod.httpx, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("down")))
+    # The cached poll still answers ...
+    assert polled.teams == ["UGA", "TEX", "ND", "IU"]
+    assert "rankings" in polled.last_error
+
+
+def test_with_no_cached_poll_at_all_the_named_teams_still_work(tmp_path, monkeypatch):
+    import glance.sources.espn as mod
+    monkeypatch.setattr(mod.httpx, "get",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("down")))
+    src = EspnSource(league="football/college-football", teams="UGA", top=4,
+                     tz=TZ, cache_dir=tmp_path)
+    assert src.teams == ["UGA"]
+    assert src.configured
+
+
+def test_a_board_following_only_a_poll_is_still_configured(tmp_path):
+    src = EspnSource(league="football/college-football", teams="", top=4,
+                     tz=TZ, cache_dir=tmp_path)
+    assert src.configured
+
+
+def test_the_board_asks_the_source_every_time(polled):
+    """A poll-driven board's membership changes weekly. A copy taken at
+    startup would quietly follow last month's top four."""
+    board = Board(name="ncaa", source=polled)
+    assert board.teams == ["UGA", "TEX", "ND", "IU"]
+    polled.fixed = ["WASH"]
+    assert board.teams[0] == "WASH"

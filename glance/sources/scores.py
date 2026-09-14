@@ -182,8 +182,16 @@ class Board:
 
     name: str
     source: Any
-    teams: list[str] = field(default_factory=list)
     label: str = ""
+
+    @property
+    def teams(self) -> list[str]:
+        """Asked of the source every time, never cached here.
+
+        A poll-driven board's membership changes weekly; a copy taken at
+        startup would quietly follow last month's top four.
+        """
+        return list(getattr(self.source, "teams", []) or [])
 
     @property
     def configured(self) -> bool:

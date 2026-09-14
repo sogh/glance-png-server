@@ -860,7 +860,9 @@ sources:
     ncaa:
       provider: espn
       league: football/college-football
-      teams: "WASH,WSU"     # abbreviations, comma-separated
+      teams: "UGA"          # abbreviations, comma-separated
+      top: 4                # ... and whoever is AP top 4 this week
+      poll: ap              # ap | usa (coaches) | fcs
       label: NCAA
       refresh: 900
     wpbl:
@@ -883,7 +885,14 @@ channels:
 | `provider` | `espn` for any league ESPN carries, `wpbl` for the Women's Pro Baseball League |
 | `league` | ESPN only: the `<sport>/<league>` path, e.g. `football/college-football`, `basketball/mens-college-basketball` |
 | `teams` | Comma-separated abbreviations. Empty follows the whole league — sensible for the WPBL's four clubs, silly for a hundred NCAA programmes |
+| `top` | Also follow the top N of a poll. A standing instruction, not a list to maintain — the membership changes weekly and the board follows it |
+| `poll` | Which poll `top` reads: `ap`, `usa` (coaches), `fcs` |
 | `label` | What the panel calls it. Defaults to the board name |
+
+A team that is both named and ranked — Georgia sitting at #2 — is followed
+once, and named teams keep their place at the front as the poll churns. If the
+poll can't be fetched the board falls back to the cached one, then to just the
+named teams: a poll outage costs you the extra teams, not the panel.
 
 The panel shows **the last result and the next fixture together**, same as the
 MLB one, and hands the whole strip to a game in progress. Poll rankings are
