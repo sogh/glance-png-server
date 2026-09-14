@@ -270,22 +270,17 @@ def test_the_token_is_not_leaked_into_scene_params(tokened_client):
 
 
 def test_preview_shows_scenes_with_useful_demo_arguments(client):
-    """Without arguments, `text` and `marquee` render their own placeholder,
-    which tells you nothing about how they look."""
+    """Without arguments, `text` renders its own placeholder, which tells you
+    nothing about how it looks."""
     html = client.get("/preview").text
     assert "/s/text.png?text=" in html
-    assert "/s/marquee.png?text=" in html
     assert "/s/countdown.png?date=" in html
 
 
-def test_preview_has_an_animation_strip(client):
-    html = client.get("/preview").text
-    assert "APNG" in html
-    assert html.count("/s/marquee.png?") >= 3
-
-
-def test_preview_animations_are_really_animated(client):
-    r = client.get("/s/marquee.png?text=SCROLLING&color=amber")
-    assert r.status_code == 200
-    assert r.content.startswith(b"\x89PNG\r\n\x1a\n")
-    assert b"acTL" in r.content[:200], "should carry the animation control chunk"
+def test_nothing_served_is_an_animated_png(client):
+    """The device renders frame zero of an APNG and stops, so paying for the
+    frames was pointless. Nothing emits them any more."""
+    for ref in ("/s/pulse.png", "/s/sprite.png", "/s/text.png?text=HI"):
+        body = client.get(ref).content
+        assert body.startswith(b"\x89PNG\r\n\x1a\n"), ref
+        assert b"acTL" not in body, f"{ref} is still an APNG"

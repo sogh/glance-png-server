@@ -27,7 +27,6 @@ device ──GET /c/<channel>.png──▶ server
 | `sprites.py` | Pixel art as editable character grids. |
 | `weathericons.py` | Weather glyphs drawn from primitives. |
 | `brightness.py` | Time-of-day dimming curve. |
-| `animation.py` | Multi-frame output as APNG. |
 | `carousel.py` | Which scene this fetch gets. |
 | `config.py` | `settings.yaml` + the editor's overlay. |
 | `runtime.py` | Composition root. Owns sources, applies dimming, hot-reloads. |

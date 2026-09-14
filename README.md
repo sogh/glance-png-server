@@ -387,7 +387,6 @@ an entry actually mentions one, and at most once per request.
 | `panels` | Test card: shows the physical 64px modules | always |
 | `clock` | Time and date | always |
 | `countdown` | Days until a target date | always |
-| `marquee` | Scrolling text, as an animated PNG | always |
 | `pulse` | Names with a colour ramp across the letters | always |
 | `sprite` | Text with a pixel-art sprite set into it | always |
 | `sprites` | Every sprite, for checking the art | always |
@@ -491,13 +490,12 @@ buffering, and on a chip driving LED matrices from limited RAM that is real
 memory. Most small embedded PNG decoders skip it. The gap is that the docs
 never say so, which is why this had to be settled by experiment.
 
-Nothing here breaks because of it. An APNG is a valid PNG, so the panel shows
-frame zero cleanly — but paying for thirty frames that will never be seen is
-pointless, so the animated scenes default to a single frame now.
-
-`marquee` and `pulse` can still emit APNG on request (`mode: pulse`), and the
-preview page renders them, since browsers do animate. If a firmware update
-ever changes this, the mechanism is already there.
+So there is no APNG here at all any more. Everything served is a single frame.
+The `pulse` scene, which began as an animation, now runs its white-to-colour
+transition **across the letters instead of across time** — the same idea, in
+one frame, visible on hardware that will never animate. The `marquee` scene is
+gone; scrolling text that cannot scroll is just truncated text, and `text`
+already does that.
 
 **What still moves:** the device cycles between private-app slots on its own
 clock, every few seconds. That is real motion, and it is what several channels
@@ -565,7 +563,6 @@ visual idea, in one frame, on hardware that will never animate.
     items: "ADA:yellow,GRACE:blue"
     layout: column      # or row, side by side
     from: white         # the colour each name starts at
-    mode: gradient      # `pulse` instead for the APNG version
   dwell: 300
 ```
 

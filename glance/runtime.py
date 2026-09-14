@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 from . import brightness as brightness_mod
-from .animation import Frames
 from .canvas import Canvas
 from .carousel import Carousel, Selection
 from .config import ChannelEntry, Settings, load_settings
@@ -309,7 +308,7 @@ class GlanceApp:
 
     # --- rendering ---------------------------------------------------------
 
-    def dim(self, rendered: Canvas | Frames, ctx: RenderContext) -> Canvas | Frames:
+    def dim(self, rendered: Canvas, ctx: RenderContext) -> Canvas:
         """Apply the time-of-day level to a finished render.
 
         Done here rather than in each scene so every panel is treated the
@@ -317,8 +316,7 @@ class GlanceApp:
         """
         level = ctx.brightness if ctx.brightness is not None else \
             self.brightness.level_at(ctx.now)
-        for canvas in getattr(rendered, "canvases", [rendered]):
-            brightness_mod.apply(canvas, level)
+        brightness_mod.apply(rendered, level)
         return rendered
 
     def context(self, now: datetime | None = None,
@@ -346,7 +344,7 @@ class GlanceApp:
     def render_scene(self, ref: str, params: dict[str, Any] | None = None,
                      ctx: RenderContext | None = None,
                      width: int | None = None,
-                     brightness: float | None = None) -> tuple[Canvas | Frames, str]:
+                     brightness: float | None = None) -> tuple[Canvas, str]:
         """Render one scene by reference. Returns (canvas, label).
 
         Failures are drawn, not raised: the device caches the last image it
@@ -365,7 +363,7 @@ class GlanceApp:
     def render_channel(self, channel: str, advance: bool = True,
                        now: datetime | None = None,
                        width: int | None = None,
-                       brightness: float | None = None) -> tuple[Canvas | Frames, Selection | None, str]:
+                       brightness: float | None = None) -> tuple[Canvas, Selection | None, str]:
         ctx = self.context(now, width=width, brightness=brightness)
         if channel not in self.settings.channels:
             known = ", ".join(self.settings.channels) or "none configured"
@@ -389,9 +387,7 @@ class GlanceApp:
                 f"error:{selection.key}",
             )
 
-    def png(self, canvas: Canvas | Frames) -> bytes:
-        # Canvas and Frames both expose to_png(); Frames returns APNG bytes
-        # when it holds more than one frame.
+    def png(self, canvas: Canvas) -> bytes:
         return canvas.to_png(quantize=self.settings.quantize_png)
 
     # --- introspection -----------------------------------------------------

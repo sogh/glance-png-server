@@ -8,10 +8,8 @@ zero, which is the all-white state -- still perfectly readable.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
-from ..animation import Frames
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import mix
@@ -72,14 +70,9 @@ def _draw(c: Canvas, text: str, colour: Any, x: int, y: int, font, scale: int,
                     help="Colour each name starts at"),
               Param("font", "select", "5x7", options="@fonts"),
               Param("scale", "number", None, minimum=1, maximum=4),
-              Param("stagger", "number", 0, minimum=0, maximum=1,
-                    help="pulse mode: offset items so they take turns"),
-              Param("floor", "number", 0, minimum=0, maximum=1),
-              Param("frames", "number", 30, minimum=2, maximum=120),
-              Param("duration", "number", 70, minimum=20, maximum=1000),
               Param("background", "color", "black", options="@colors"),
           ])
-def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
+def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     items = parse_items(params.get("items", DEFAULT_ITEMS))
     if not items:
         c = ctx.canvas()
@@ -88,13 +81,7 @@ def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
         return c
 
     font = get_font(str(params.get("font", "5x7")))
-    frame_count = max(2, int(params.get("frames", 30)))
-    duration = int(params.get("duration", 70))
     background = params.get("background", "black")
-    # Stagger offsets each item in the cycle so they take turns being bright.
-    stagger = float(params.get("stagger", 0.0))
-    # How far toward white the dim end goes; 0 is fully white at the trough.
-    floor = max(0.0, min(1.0, float(params.get("floor", 0.0))))
 
     texts = [t for t, _ in items]
     stacked = str(params.get("layout", "column" if len(items) > 1 else "row")) == "column"
@@ -104,36 +91,15 @@ def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Frames | Canvas:
     # a half-drawn name is worse than a smaller one.
     scale = min(requested, fits) if requested > 0 else fits
 
-    # This device does not decode APNG -- it renders frame zero and stops. So
-    # the default is a gradient across the letters rather than across time:
-    # the same white-to-colour transition, in one frame, visible on hardware
-    # that will never animate. `mode: pulse` restores the animation for a
-    # panel that can show it.
-    mode = str(params.get("mode", "gradient"))
-    if mode == "gradient":
-        c = ctx.canvas()
-        c.clear(background)
-        _layout(c, items, texts, font, scale, stacked, gradient=True,
-                gradient_from=params.get("from", "white"))
-        return c
-
-    canvases: list[Canvas] = []
-    for frame in range(frame_count):
-        c = ctx.canvas()
-        c.clear(background)
-
-        for index, (text, color) in enumerate(items):
-            # A raised cosine: starts at white, eases to full colour, eases
-            # back. Ending where it started is what makes the loop seamless.
-            phase = frame / frame_count + stagger * index
-            t = (1.0 - math.cos(2.0 * math.pi * phase)) / 2.0
-            shade = mix("white", color, floor + (1.0 - floor) * t)
-
-            _place(c, texts, index, text, shade, font, scale, stacked, None)
-
-        canvases.append(c)
-
-    return Frames(canvases=canvases, duration=duration)
+    # The gradient runs across the letters, not across time. It was written as
+    # an animation first; the device renders frame zero of an APNG and stops,
+    # so the same white-to-colour transition was moved into one frame, where
+    # it is visible on hardware that will never animate.
+    c = ctx.canvas()
+    c.clear(background)
+    _layout(c, items, texts, font, scale, stacked, gradient=True,
+            gradient_from=params.get("from", "white"))
+    return c
 
 
 def _place(c: Canvas, texts: list[str], index: int, text: str, colour: Any,

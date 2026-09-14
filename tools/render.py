@@ -57,19 +57,14 @@ def main() -> int:
         now = datetime.fromisoformat(stamp).replace(tzinfo=app.settings.tz)
     ctx = app.context(now)
 
-    def emit(rendered, label: str, path: Path | None) -> None:
-        # A scene may hand back a Frames instead of a Canvas; preview the first
-        # frame, which is also what a non-animating decoder would show.
-        frames = getattr(rendered, "canvases", None)
-        canvas = frames[0] if frames else rendered
-        suffix = f" [{len(frames)} frames, apng]" if frames else ""
-        size = len(app.png(rendered))
+    def emit(canvas, label: str, path: Path | None) -> None:
+        size = len(app.png(canvas))
         if path:
             path.parent.mkdir(parents=True, exist_ok=True)
             canvas.scaled(args.scale).save(path)
-            print(f"{label:24s} -> {path} ({size} bytes as served){suffix}")
+            print(f"{label:24s} -> {path} ({size} bytes as served)")
         else:
-            print(f"--- {label} ({size} bytes){suffix} ---")
+            print(f"--- {label} ({size} bytes) ---")
             print(canvas.to_ascii())
 
     if args.all:

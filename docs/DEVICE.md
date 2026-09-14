@@ -39,10 +39,11 @@ either way. It is a defensible engineering call — multi-frame buffering is
 real memory on a chip driving LED matrices — but it means motion has to come
 from somewhere else. What still moves: the device cycling between slots.
 
-Because an APNG is a valid PNG, sending one is harmless; the panel shows frame
-zero. The animated scenes here default to a single frame anyway, since paying
-for thirty frames nobody sees is pointless. `mode: pulse` still emits APNG if
-a future firmware ever changes this.
+Because an APNG is a valid PNG, sending one would be harmless -- the panel
+would show frame zero -- but paying for thirty frames nobody sees is
+pointless, so this server does not emit them at all. The `pulse` scene, which
+began as an animation, now runs its colour transition across the letters
+instead of across time.
 
 ## Fetching
 

@@ -122,7 +122,6 @@ def test_the_override_pins_it_for_previewing(app):
     assert list(a.image.get_flattened_data()) == list(b.image.get_flattened_data())
 
 
-def test_animated_scenes_are_dimmed_frame_by_frame(app):
-    fr, _ = app.render_scene("pulse", {"mode": "pulse"}, app.context(at(23, 30)))
-    for canvas in fr.canvases:
-        assert max(sum(p) for p in canvas.image.get_flattened_data()) < 700
+def test_every_scene_is_dimmed_including_the_gradient_one(app):
+    canvas, _ = app.render_scene("pulse", {}, app.context(at(23, 30)))
+    assert max(sum(p) for p in canvas.image.get_flattened_data()) < 700

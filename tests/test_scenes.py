@@ -21,12 +21,10 @@ def lit(canvas) -> int:
 
 @pytest.mark.parametrize("scene_id", [s for s in sorted(REGISTRY) if s != "static"])
 def test_every_scene_renders_a_correctly_sized_panel(app, now, scene_id):
-    rendered, label = app.render_scene(scene_id, {}, app.context(now))
-    # A scene may return a Canvas or a Frames; both must be panel-sized.
-    canvas = getattr(rendered, "canvases", [rendered])[0]
+    canvas, label = app.render_scene(scene_id, {}, app.context(now))
     assert canvas.image.size == (192, 32)
     assert not label.startswith("error:"), f"{scene_id} raised"
-    assert app.png(rendered).startswith(b"\x89PNG\r\n\x1a\n")
+    assert app.png(canvas).startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_scenes_report_availability_honestly(app, now):

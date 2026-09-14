@@ -68,23 +68,14 @@ def _params(request: Request, drop: set[str]) -> dict[str, Any]:
 RESERVED_QUERY = {"peek", "k", "_", "width", "brightness"}
 
 # Scenes that need an argument to show anything on the preview page. Without
-# these, `text` and `marquee` render their own "(no text)" placeholder, which
+# these, `text` renders its own "(no text)" placeholder, which
 # tells you nothing about how they look.
 PREVIEW_DEMO: dict[str, str] = {
     "text": "text=GOOD+MORNING&sub=IT+IS+A+FINE+DAY&color=amber",
-    "marquee": "text=SCROLLING+MARQUEE+TEXT&color=amber",
     "countdown": "date=2026-12-25&label=XMAS",
     "sprite": "before=It%27s&after=season%21",
     "pulse": "items=ADA:yellow,GRACE:blue",
 }
-
-# Marquees shown in the animation strip, as (label, query).
-PREVIEW_ANIMATIONS: list[tuple[str, str]] = [
-    ("marquee, 5x7", "text=MERRY+CHRISTMAS+FROM+THE+HOUSE&color=green"),
-    ("marquee, double height", "text=SHIP+IT&color=amber&scale=2"),
-    ("marquee, slow + small", "text=a+quiet+scrolling+line+of+text&font=3x5&step=1&duration=120"),
-]
-
 
 def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) -> Response:
     headers = {
@@ -401,10 +392,6 @@ def create_app(config_path: str | None = None) -> FastAPI:
                   if hasattr(REGISTRY[sid], "description") else "")
             for sid in sorted(REGISTRY) if sid != "static"
         )
-        anim_frames = "".join(
-            frame(f"/s/marquee.png?{q}", label, "animated png")
-            for label, q in PREVIEW_ANIMATIONS
-        )
         static_frames = "".join(
             frame(f"/s/static:{n}.png", f"static:{n}") for n in list_static(ctx)
         )
@@ -437,12 +424,6 @@ def create_app(config_path: str | None = None) -> FastAPI:
  &middot; <a href="{tokened(f'/preview?zoom={3 if zoom != 3 else 5}')}">toggle zoom</a></p>
 {"".join(parts) or "<p class='meta'>No channels configured.</p>"}
 <h3>All scenes</h3><div class="grid">{scene_frames}</div>
-<h3>Animation &mdash; APNG</h3>
-<p class="meta">These are animated PNGs. If they move here, your browser
- supports APNG; whether the <em>panel</em> does is the open question &mdash; an
- APNG is a valid PNG, so a decoder that ignores the animation chunks shows
- frame&nbsp;0 and nothing breaks. Point a private app at one to find out.</p>
-<div class="grid">{anim_frames}</div>
 <h3>Static artwork ({len(list_static(ctx))})</h3><div class="grid">{static_frames
     or "<p class='meta'>Drop PNGs into assets/static/ to see them here.</p>"}</div>
 <script>
