@@ -368,6 +368,7 @@ an entry actually mentions one, and at most once per request.
 | Scene | Shows | Available when |
 |---|---|---|
 | `banner` | Title card — big line, small line, evergreens | always |
+| `scores` | Result + next fixture from a configured scoreboard | the board has a game |
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |
@@ -846,6 +847,90 @@ network. Printing the first listing in the array is wrong half the time.
 `Pre-Game` state; rendering that makes a game that has not started look like a
 scoreless one in progress. Before first pitch the panel shows the matchup and
 the start time instead.
+
+### Other leagues — NCAA football, the WPBL
+
+MLB keeps its own source above, because `statsapi` carries the half-inning and
+per-side broadcast feeds that nothing else does. Everything else goes through
+named **scoreboards**, each of which becomes a `scores` scene:
+
+```yaml
+sources:
+  scoreboards:
+    ncaa:
+      provider: espn
+      league: football/college-football
+      teams: "WASH,WSU"     # abbreviations, comma-separated
+      label: NCAA
+      refresh: 900
+    wpbl:
+      provider: wpbl
+      teams: ""             # empty = the whole league
+      label: WPBL
+```
+
+```yaml
+channels:
+  scores:
+    - scene: scores
+      params: { board: ncaa }
+    - scene: scores
+      params: { board: wpbl, accent: sky }
+```
+
+| Key | Meaning |
+|---|---|
+| `provider` | `espn` for any league ESPN carries, `wpbl` for the Women's Pro Baseball League |
+| `league` | ESPN only: the `<sport>/<league>` path, e.g. `football/college-football`, `basketball/mens-college-basketball` |
+| `teams` | Comma-separated abbreviations. Empty follows the whole league — sensible for the WPBL's four clubs, silly for a hundred NCAA programmes |
+| `label` | What the panel calls it. Defaults to the board name |
+
+The panel shows **the last result and the next fixture together**, same as the
+MLB one, and hands the whole strip to a game in progress. Poll rankings are
+drawn in the accent colour so `19 WASH 16` reads as a ranked team and a score
+rather than as two numbers.
+
+#### ESPN: use the per-team endpoint, and don't set a User-Agent
+
+Two things here were found the hard way and are easy to undo by accident.
+
+**The scoreboard endpoint is the wrong one.** `/<sport>/<league>/scoreboard`
+returns every game in the country — **3.8 MB** for two weeks of college
+football. `/teams/<abbrev>/schedule` returns one team's whole season, past and
+future, for **200 KB**, which is exactly what "the last one and the next one"
+needs. It takes the abbreviation straight in the path, so `WASH` works without
+looking up a numeric id.
+
+**ESPN 403s a browser-shaped User-Agent.** Tested three times each:
+
+| User-Agent | Result |
+|---|---|
+| `python-httpx/0.27` (httpx's own) | **200** |
+| `curl/8.7.1` | **200** |
+| `Mozilla/5.0 ... Chrome/126.0` | 403 |
+| `glance-png-server` | 403 |
+
+So the source sets **no** `User-Agent` header at all and lets httpx send its
+own. Adding a realistic browser one — the obvious "fix" if this ever starts
+failing — is what breaks it.
+
+#### WPBL: a real feed, entered by hand
+
+The WPBL played its first season in 2026. Nobody carries it: ESPN's API has
+twelve baseball leagues and this is not one of them. What the league does have
+is a WordPress site whose games are a custom post type with the REST API left
+on — `/wp-json/wp/v2/wpbl_game` and `/wpbl_team`, with real fields for teams,
+scores, status and broadcast.
+
+That is a feed rather than a scrape. But **the scores are typed in by whoever
+runs the site**, so they land when someone gets round to it rather than at the
+final out, and a blank field means "not entered yet". The panel treats a
+missing score as unknown rather than as nil, so a game that has not been filled
+in shows the matchup instead of `0 - 0`.
+
+The ACF plugin returns every field wrapped in its own definition, so the whole
+season costs about 280 KB even asking for nine fields. One request, cached
+hard.
 
 ### Instagram counts
 

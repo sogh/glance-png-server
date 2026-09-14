@@ -23,7 +23,10 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.espn import EspnSource
 from .sources.modes import ModeSet
+from .sources.scores import Board
+from .sources.wpbl import WpblSource
 from .sources.baseball import BaseballSource
 from .sources.homeassistant import HomeAssistantSource
 from .sources.instagram import InstagramSource
@@ -57,6 +60,7 @@ class GlanceApp:
         self.instagram = self._build_instagram(settings)
         self.baseball = self._build_baseball(settings)
         self.homeassistant = self._build_ha(settings)
+        self.scoreboards = self._build_scoreboards(settings)
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -105,6 +109,38 @@ class GlanceApp:
             refresh=int(spec.get("refresh", 600)),
             live_refresh=int(spec.get("live_refresh", 60)),
         )
+
+    @staticmethod
+    def _build_scoreboards(settings: Settings) -> dict[str, Board]:
+        """Named scoreboards from config, one provider each.
+
+        An unknown provider is skipped with a log line rather than raised: a
+        typo in one board should not stop the server, it should stop that
+        board -- and the panel then says so on the panel.
+        """
+        out: dict[str, Board] = {}
+        for name, spec in (settings.scoreboards or {}).items():
+            spec = dict(spec or {})
+            if not spec.pop("enabled", True):
+                continue
+            provider = str(spec.get("provider", "espn")).lower()
+            teams = str(spec.get("teams", "") or "")
+            common = dict(teams=teams, tz=settings.tz,
+                          cache_dir=settings.cache_dir,
+                          refresh=int(spec.get("refresh", 900)),
+                          live_refresh=int(spec.get("live_refresh", 60)),
+                          name=str(name))
+            if provider == "espn":
+                source = EspnSource(league=str(spec.get("league", "")), **common)
+            elif provider == "wpbl":
+                source = WpblSource(**common)
+            else:
+                log.warning("scoreboard %r: unknown provider %r", name, provider)
+                continue
+            out[str(name)] = Board(name=str(name), source=source,
+                                   teams=[t.strip() for t in teams.split(",") if t.strip()],
+                                   label=str(spec.get("label", "") or ""))
+        return out
 
     @staticmethod
     def _build_ha(settings: Settings) -> HomeAssistantSource:
@@ -180,6 +216,8 @@ class GlanceApp:
             self.carousel.settings = fresh
             self.carousel.min_advance_interval = fresh.carousel_min_advance
             self.todos.path = Path(fresh.todos_file)
+            if fresh.scoreboards != self.settings.scoreboards:
+                self.scoreboards = self._build_scoreboards(fresh)
             modes_changed = fresh.modes != self.settings.modes
             if modes_changed:
                 self.modes = ModeSet(fresh.modes)
@@ -291,6 +329,7 @@ class GlanceApp:
             homeassistant=self.homeassistant,
             todos=self.todos,
             holidays=self.holidays,
+            scoreboards=self.scoreboards,
             mode_set=self.modes,
         )
 

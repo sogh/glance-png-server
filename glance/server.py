@@ -143,6 +143,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
             return sorted(REGISTRY)
         if marker == "@calendars":
             return glance.calendars.names
+        if marker == "@boards":
+            return sorted(glance.scoreboards)
         if marker == "@entities":
             try:
                 return glance.homeassistant.ids()[:400]

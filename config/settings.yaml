@@ -147,6 +147,45 @@ sources:
     refresh: 600              # seconds between checks
     live_refresh: 60          # poll harder while a game is being played
 
+  # ---------------------------------------------------------------------
+  # Other leagues. Each named board becomes a `scores` scene you can point
+  # a channel at: `- scene: scores` with `params: { board: ncaa }`.
+  #
+  #   provider  espn  -> any league ESPN carries, named "<sport>/<league>"
+  #             wpbl  -> the Women's Pro Baseball League
+  #   teams     comma separated, matched on abbreviation OR name. Leave it
+  #             empty to follow a whole league -- sensible for the WPBL's
+  #             four clubs, silly for a hundred NCAA programmes.
+  #   label     what the panel calls it. Defaults to the board name.
+  #
+  # MLB keeps its own `baseball` source above: statsapi carries the current
+  # half-inning and per-side broadcast feeds, which ESPN does not.
+  # ---------------------------------------------------------------------
+  scoreboards:
+
+    # NCAA football. ESPN wants the team abbreviation -- WASH, WSU, OSU.
+    # Look one up at espn.com/college-football/team/_/id/<whatever>; the
+    # abbreviation is in the URL of the team page.
+    ncaa:
+      provider: espn
+      league: football/college-football
+      teams: "WASH,WSU"
+      label: NCAA
+      refresh: 900            # college football is weekly; no need to hurry
+      live_refresh: 60
+
+    # The WPBL played its first season in 2026. Nobody carries it -- ESPN's
+    # API has twelve baseball leagues and this is not one of them -- so this
+    # reads the league's own site, whose games are a WordPress custom post
+    # type with the REST API left on. Scores are hand-entered there, so they
+    # land when someone types them rather than at the final out.
+    wpbl:
+      provider: wpbl
+      teams: ""               # all four
+      label: WPBL
+      refresh: 600
+      live_refresh: 120
+
   # Home Assistant entity states.
   #
   # The token is a long-lived access token: open Home Assistant, click your

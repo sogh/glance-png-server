@@ -98,6 +98,7 @@ class RenderContext:
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None
     brightness: float | None = None   # None = use the schedule
+    scoreboards: dict[str, Any] = field(default_factory=dict)
     mode_set: Any = None              # sources.modes.ModeSet
     _modes: frozenset[str] | None = field(default=None, repr=False, compare=False)
 

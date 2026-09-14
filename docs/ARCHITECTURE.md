@@ -35,9 +35,27 @@ device ──GET /c/<channel>.png──▶ server
 | `editor.py` | The `/edit` page. |
 | `artstore.py` | Uploading and validating artwork. |
 | `scenes/` | One module per scene. A render function plus a param schema. |
-| `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram, modes. |
+| `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram, modes, scoreboards. |
 
 ## Decisions worth knowing
+
+**Scoreboards share one vocabulary.** Every provider speaks its own dialect --
+MLB says `abstractGameState`, ESPN says `STATUS_FINAL`, the WPBL's WordPress
+says `final`. Each source translates into `sources/scores.py::Fixture` and a
+single `scores` scene draws all of them, so a new league is a config entry.
+MLB keeps its bespoke source and scene because statsapi carries the current
+half-inning and per-side broadcast feeds that the neutral shape has no room
+for.
+
+The followed team is stored **on each fixture**, not once on the snapshot.
+Follow two teams and the last result and the next fixture routinely belong to
+different ones; a single team would then be wrong for at least one of them and
+"did we win" would answer None for a game plainly won.
+
+**ESPN wants no User-Agent.** Its edge 403s a browser-shaped UA and an
+unrecognised custom one, but serves `python-httpx/...` and `curl/...`. The
+source therefore sets no header. Adding a realistic browser UA is the obvious
+"fix" that breaks it.
 
 **Modes are calendar-driven, not a button.** A toggle needs two presses and
 the second one — days later, once the visitors have gone — is the one that
