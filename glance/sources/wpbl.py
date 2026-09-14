@@ -24,6 +24,7 @@ still costs 280 KB. Hence one request for the whole season, cached hard.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -55,6 +56,11 @@ STATE = {
 }
 # Teams change far less often than scores, so they get their own long life.
 TEAM_TTL = 86400
+
+
+def _stamp(fields: str) -> str:
+    """A short fingerprint of a request, for the cache file name."""
+    return hashlib.sha256(fields.encode()).hexdigest()[:8]
 
 
 def acf(node: dict, key: str) -> Any:
@@ -96,9 +102,14 @@ class WpblSource:
         self.timeout = timeout
         self.cache_dir = Path(cache_dir or ".")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.games_file = self.cache_dir / "wpbl-games.json"
-        self.teams_file = self.cache_dir / "wpbl-teams.json"
-        self.media_file = self.cache_dir / "wpbl-media.json"
+        # The requested field list is baked into the cache file name. Asking
+        # for a new field otherwise reads a cached payload that predates it
+        # and finds it missing -- and with a day-long TTL the new field simply
+        # does not arrive until tomorrow. That cost a round of "why are there
+        # no logos on the server"; the name now changes when the question does.
+        self.games_file = self.cache_dir / f"wpbl-games-{_stamp(GAME_FIELDS)}.json"
+        self.teams_file = self.cache_dir / f"wpbl-teams-{_stamp(TEAM_FIELDS)}.json"
+        self.media_file = self.cache_dir / f"wpbl-media-{_stamp(TEAM_FIELDS)}.json"
         self.last_error: str | None = None
         self._lock = threading.Lock()
 
