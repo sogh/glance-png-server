@@ -105,7 +105,7 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     if snap["last"] and crests:
         # The logo row is 16px tall, so it displaces the text scoreline rather
         # than sharing its 5px strip.
-        _result_crests(c, snap["last"], crests, accent, small, tag)
+        _result_crests(c, snap["last"], crests, accent, small, tag, show_rank)
         y = 17
     elif snap["last"]:
         _result(c, snap["last"], ctx.now, y, accent, small, tag, show_rank)
@@ -211,24 +211,33 @@ def _crests(ctx, fixture):
     return pair if all(p is not None for p in pair) else None
 
 
-def _result_crests(c, fixture, crests, accent, small, tag):
-    """The finished game as two crests and two scores."""
+def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True):
+    """The finished game as two crests and two scores.
+
+    A poll ranking, where there is one, goes immediately left of the crest --
+    the crest says who, the number says where they stand.
+    """
     big = get_font("5x7")
     size = crests[0].height
     top = 0
     gap = 3                 # crest to its own score
     between = 14            # one team to the other
 
-    widths = [big.measure("" if s.score is None else str(s.score)) * 2
-              for s in (fixture.away, fixture.home)]
-    block = sum(size + gap + w for w in widths) + between
+    sides = (fixture.away, fixture.home)
+    ranks = [str(s.rank) if show_rank and s.ranked else "" for s in sides]
+    lead = [small.measure(r) + 2 if r else 0 for r in ranks]
+    widths = [big.measure("" if s.score is None else str(s.score)) * 2 for s in sides]
+    block = sum(lead) + sum(size + gap + w for w in widths) + between
 
     # Centre in what is actually left after the board name, rather than in the
     # full width -- otherwise the group drifts right and leaves a gutter.
     reserved = (small.measure(tag[:8]) + 6) if tag else 6
     x = max(2, 2 + (c.width - reserved - 2 - block) // 2)
 
-    for side, crest, width in zip((fixture.away, fixture.home), crests, widths):
+    for side, crest, width, rank, pad in zip(sides, crests, widths, ranks, lead):
+        if rank:
+            c.text(x, top + (size - small.height) // 2, rank, dim(accent, 0.85), small)
+            x += pad
         c.blit(crest, x, top)
         x += size + gap
         if side.score is not None:

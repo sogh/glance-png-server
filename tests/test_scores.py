@@ -32,12 +32,16 @@ def no_network(monkeypatch):
     through httpcore, which does not call it by that name.
     """
     import glance.sources.espn as espn_mod
+    import glance.sources.logos as logos_mod
     import glance.sources.wpbl as wpbl_mod
 
     def refuse(*args, **kwargs):
         raise AssertionError("this test tried to use the network")
 
-    for module in (espn_mod, wpbl_mod):
+    # logos included: the store fetches on a background thread, so a missing
+    # crest here does not fail, it quietly waits on DNS for a fake host and
+    # puts seconds on the suite.
+    for module in (espn_mod, logos_mod, wpbl_mod):
         monkeypatch.setattr(module.httpx, "get", refuse)
 
 
@@ -385,7 +389,10 @@ def test_the_scene_is_unavailable_with_nothing_to_show_but_always_overrides(app,
 
 def rankings_payload() -> dict:
     def entry(rank, abbrev):
-        return {"current": rank, "team": {"abbreviation": abbrev}}
+        return {"current": rank, "recordSummary": "2-0",
+                "team": {"abbreviation": abbrev, "nickname": abbrev,
+                         "logos": [{"href": f"http://x/{abbrev}.png",
+                                    "rel": ["full", "dark"]}]}}
     return {"rankings": [
         {"name": "AFCA Coaches Poll", "type": "usa",
          "ranks": [entry(1, "UGA"), entry(2, "TEX"), entry(3, "OSU")]},
@@ -542,3 +549,111 @@ def test_logos_can_be_turned_off(app, espn, tmp_path):
     without = REGISTRY["scores"].render(ctx, {"board": "ncaa", "logos": False})
     assert (with_logos.image.get_flattened_data()
             != without.image.get_flattened_data())
+
+
+# --- the rankings panel -----------------------------------------------------
+
+def test_the_poll_is_read_as_teams_with_rank_record_and_logo(polled):
+    entries = polled.ranked_teams(4)
+    assert [s.abbrev for s in entries] == ["TEX", "UGA", "ND", "IU"]
+    assert entries[0].rank == 1
+    assert entries[0].key == "espn-TEX"
+
+
+def test_following_is_bounded_by_top_but_the_panel_is_not(polled):
+    """Every followed team costs a schedule request, so "show the top 16" on a
+    ranking panel must not quietly become sixteen downloads a refresh."""
+    polled.top = 2
+    assert polled.ranked() == ["TEX", "UGA"]
+    assert len(polled.ranked_teams(5)) == 5
+
+
+def test_a_board_that_follows_nobody_can_still_show_a_poll(tmp_path):
+    src = EspnSource(league="football/college-football", teams="", top=0,
+                     tz=TZ, cache_dir=tmp_path)
+    src.rankings_file.write_text(json.dumps(rankings_payload()))
+    assert src.ranked() == []
+    assert len(src.ranked_teams(3)) == 3
+
+
+def rankings_ctx(app, source, logos=None):
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=source, label="NCAA")}
+    ctx.logos = logos
+    return ctx
+
+
+def test_the_rankings_panel_draws_the_poll(app, polled, tmp_path):
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX", "espn-UGA"]))
+    scene = REGISTRY["rankings"]
+    assert scene.available(ctx, {"board": "ncaa"})
+    c = scene.render(ctx, {"board": "ncaa"})
+    assert c.image.get_flattened_data().count((0, 0, 0)) < 192 * 32
+
+
+def test_a_team_with_no_usable_crest_shows_its_abbreviation(app, polled, tmp_path):
+    """In a list of many, one text cell reads as a team without a usable
+    crest. In a head-to-head it would look like a rendering fault, which is
+    why `scores` is all-or-nothing and this is not."""
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX"]))
+    scene = REGISTRY["rankings"]
+    partial = scene.render(ctx, {"board": "ncaa", "style": "crests"})
+    # With no store at all every entry is text; with one crest available the
+    # panel must differ from that, and still draw something for every team.
+    ctx.logos = None
+    all_text = scene.render(ctx, {"board": "ncaa", "style": "crests"})
+    assert partial.image.get_flattened_data() != all_text.image.get_flattened_data()
+    for canvas in (partial, all_text):
+        assert canvas.image.get_flattened_data().count((0, 0, 0)) < 192 * 32
+
+
+def test_text_style_fits_more_than_crests(app, polled, tmp_path):
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX", "espn-UGA"]))
+    scene = REGISTRY["rankings"]
+    crests = scene.render(ctx, {"board": "ncaa", "style": "crests"})
+    text = scene.render(ctx, {"board": "ncaa", "style": "text"})
+    assert crests.image.get_flattened_data() != text.image.get_flattened_data()
+
+
+def test_count_limits_what_is_drawn(app, polled, tmp_path):
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX", "espn-UGA"]))
+    scene = REGISTRY["rankings"]
+    one = scene.render(ctx, {"board": "ncaa", "count": 1, "style": "text"})
+    five = scene.render(ctx, {"board": "ncaa", "count": 5, "style": "text"})
+    lit = lambda c: sum(1 for p in c.image.get_flattened_data() if p != (0, 0, 0))
+    assert lit(one) < lit(five)
+
+
+def test_the_rankings_panel_drops_out_with_no_poll(app, tmp_path):
+    empty = EspnSource(league="football/college-football", teams="UGA",
+                       tz=TZ, cache_dir=tmp_path)
+    ctx = rankings_ctx(app, empty)
+    scene = REGISTRY["rankings"]
+    assert not scene.available(ctx, {"board": "ncaa"})
+    assert scene.available(ctx, {"board": "ncaa", "always": True})
+
+
+def test_a_board_with_no_poll_support_is_handled(app, wpbl):
+    """The WPBL has four teams and no poll. Asking it for one must say so,
+    not raise."""
+    ctx = rankings_ctx(app, wpbl)
+    scene = REGISTRY["rankings"]
+    assert not scene.available(ctx, {"board": "ncaa"})
+    c = scene.render(ctx, {"board": "ncaa"})
+    assert c.width == 192
+
+
+def test_the_crest_scoreline_shows_a_ranking(app, espn, tmp_path):
+    """The crest says who, the number says where they stand."""
+    from glance.scenes.scores import _result_crests
+    from glance.canvas import Canvas
+    from glance.fonts import get_font
+    fixture = finished(espn)
+    from PIL import Image
+    crests = [Image.new("RGB", (16, 16), (200, 0, 0))] * 2
+    ranked = Canvas(width=192)
+    plain = Canvas(width=192)
+    _result_crests(ranked, fixture, crests, "amber", get_font("3x5"), "NCAA", True)
+    _result_crests(plain, fixture, crests, "amber", get_font("3x5"), "NCAA", False)
+    assert fixture.home.rank == 19
+    assert ranked.image.get_flattened_data() != plain.image.get_flattened_data()

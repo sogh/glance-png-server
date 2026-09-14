@@ -180,10 +180,10 @@ sources:
     ncaa:
       provider: espn
       league: football/college-football
-      teams: "UGA"
-      top: 4                  # ... and the current AP top 4
+      teams: "UGA"            # whose scores to follow
+      top: 0                  # and nobody else's -- see `rankings` below
       poll: ap                # ap | usa (coaches) | fcs
-      label: NCAA
+      label: UGA
       refresh: 900            # college football is weekly; no need to hurry
       live_refresh: 60
       poll_refresh: 21600     # the poll moves once a week, not once a minute
@@ -326,15 +326,24 @@ channels:
         count: 3
         header: true
 
-  # Scores. Both leagues share one slot and alternate on each refresh: the
-  # NCAA board is Georgia plus the AP top four, the WPBL board is all four
-  # clubs. Neither shows if it has nothing to say, so in February this slot
-  # is just the WPBL and in July it is just the NCAA.
+  # Scores. Three panels share one slot and take turns on each refresh:
+  # Georgia's own result and next game, the AP poll, and the WPBL. Any of
+  # them drops out when it has nothing to say, so in February this slot is
+  # just the WPBL and in July just the football.
+  #
+  # `top: 0` on the ncaa board above is deliberate: every followed team costs
+  # a schedule request, and the rankings panel reads the published poll
+  # instead -- one cached call however many teams it shows.
   scores:
     - scene: scores
       params:
         board: ncaa
         accent: amber
+    - scene: rankings
+      params:
+        board: ncaa
+        accent: amber
+        count: 0              # as many as the strip takes
     - scene: scores
       params:
         board: wpbl

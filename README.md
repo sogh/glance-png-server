@@ -369,6 +369,7 @@ an entry actually mentions one, and at most once per request.
 |---|---|---|
 | `banner` | Title card — big line, small line, evergreens | always |
 | `scores` | Result + next fixture from a configured scoreboard | the board has a game |
+| `rankings` | The top of a poll, as many as fit | the poll is available |
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |
@@ -922,6 +923,29 @@ looking up a numeric id.
 So the source sets **no** `User-Agent` header at all and lets httpx send its
 own. Adding a realistic browser one — the obvious "fix" if this ever starts
 failing — is what breaks it.
+
+#### `rankings` — the top of a poll
+
+The companion to `scores`: that one asks how our team did, this one asks who
+is on top.
+
+```yaml
+- scene: rankings
+  params: { board: ncaa, count: 0, style: crests }
+```
+
+`count: 0` fits as many as the strip takes — about 12 as crests, all 25 as
+text (`style: text`). It reads the **published poll**, not any team's
+schedule, so showing twenty-five teams costs one cached request rather than
+twenty-five. That is also why the `ncaa` board sets `top: 0`: `top` controls
+whose *scores* are followed, and each of those is a schedule request, so
+"show me the top 16" on a ranking panel must not quietly become sixteen
+downloads a refresh.
+
+Unlike `scores`, a team here whose crest will not read falls back to its
+abbreviation **in place**. In a list of many that reads as one team without a
+usable logo; in a head-to-head it would look like a rendering fault, which is
+why that one is all-or-nothing.
 
 #### Team crests
 

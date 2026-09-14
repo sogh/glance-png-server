@@ -182,14 +182,23 @@ class EspnSource:
         return out
 
     def ranked(self) -> list[str]:
-        """The top `top` abbreviations of the configured poll.
+        """The top `top` abbreviations, for following.
 
-        A failed fetch falls back to the cached poll, and then to nothing --
-        the named teams still work, so a poll outage costs the extra teams
-        rather than the whole panel.
+        Deliberately bounded by `top` rather than by the poll's length: every
+        followed team costs a schedule request, so "show me the top 16" on a
+        ranking panel must not quietly become sixteen downloads a refresh.
+        Ask `ranked_teams` for the poll itself.
         """
         if not self.top:
             return []
+        return [side.abbrev for side in self.ranked_teams(self.top)]
+
+    def ranked_teams(self, limit: int = 25) -> list[Side]:
+        """The poll itself: rank, abbreviation, record and logo per entry.
+
+        Costs one cached request whatever the limit, because it reads the
+        published poll rather than each team's schedule.
+        """
         path = self.rankings_file
         payload = None
         if path.exists():
@@ -218,15 +227,30 @@ class EspnSource:
         if chosen is None:
             return []
 
-        out: list[str] = []
+        out: list[Side] = []
+        seen: set[str] = set()
         for entry in sorted(chosen.get("ranks") or [],
                             key=lambda e: int(e.get("current") or 999)):
-            abbrev = str((entry.get("team") or {}).get("abbreviation") or "").strip()
-            if abbrev and abbrev not in out:
-                out.append(abbrev)
-            if len(out) >= self.top:
+            team = entry.get("team") or {}
+            abbrev = str(team.get("abbreviation") or "").strip()
+            if not abbrev or abbrev in seen:
+                continue
+            seen.add(abbrev)
+            out.append(Side(
+                abbrev=abbrev,
+                name=str(team.get("nickname") or team.get("name") or ""),
+                record=str(entry.get("recordSummary") or ""),
+                rank=int(entry.get("current") or 0) or None,
+                logo=_logos(team),
+                key=f"espn-{team.get('id') or abbrev}",
+            ))
+            if len(out) >= max(1, int(limit)):
                 break
         return out
+
+    @property
+    def poll_name(self) -> str:
+        return {"ap": "AP", "usa": "COACHES", "fcs": "FCS"}.get(self.poll, self.poll.upper())
 
     def _slug(self, suffix: str) -> str:
         return re.sub(r"[^A-Za-z0-9]+", "-", f"{self.league}-{suffix}").strip("-").lower()
