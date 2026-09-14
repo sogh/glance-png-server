@@ -13,6 +13,12 @@ panel:
   width: 192
   quantize_png: true          # palette-encode the PNG; typically 300-3000 bytes
 
+  # How big team crests are drawn on the `scores` panel. 14 is about the floor
+  # -- below it the detailed ones (Notre Dame's interlocking ND, Ohio State's
+  # buckeye) collapse into noise. A logo that still does not read at this size
+  # is dropped and the abbreviation drawn instead.
+  logo_size: 16
+
   # Time-of-day dimming, applied to every finished panel. An LED matrix at
   # full output in a dark room is unpleasant, and doing it here means no scene
   # has to think about it.

@@ -67,6 +67,8 @@ def day_of(fixture, now) -> str:
               Param("label", "bool", True, help="Show the league name"),
               Param("broadcast", "bool", True, help="Show where to watch"),
               Param("rank", "bool", True, help="Show poll rankings where there are any"),
+              Param("logos", "bool", True,
+                    help="Draw team logos when they read at this size"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -97,8 +99,15 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     if snap["live"]:
         return _live(c, snap["live"], accent, small, show_tv, tag, show_rank)
 
+    crests = _crests(ctx, snap["last"]) if params.get("logos", True) else None
+
     y = 2
-    if snap["last"]:
+    if snap["last"] and crests:
+        # The logo row is 16px tall, so it displaces the text scoreline rather
+        # than sharing its 5px strip.
+        _result_crests(c, snap["last"], crests, accent, small, tag)
+        y = 17
+    elif snap["last"]:
         _result(c, snap["last"], ctx.now, y, accent, small, tag, show_rank)
         y += 11
     if snap["next"]:
@@ -182,6 +191,62 @@ def _result(c, fixture, now, y, accent, small, tag, show_rank):
 
 def _has_winner(fixture) -> bool:
     return fixture.away.winner or fixture.home.winner
+
+
+def _crests(ctx, fixture):
+    """Both logos, or nothing.
+
+    All or nothing on purpose: one crest beside one abbreviation reads as a
+    rendering fault rather than as a design. If either side has no logo that
+    survives the reduction -- see sources/logos.py -- both sides use text.
+    """
+    store = getattr(ctx, "logos", None)
+    if store is None or fixture is None:
+        return None
+    # Ask for both before judging. Returning early on the first miss would
+    # only ever queue one download per refresh, so a fresh cache took a
+    # refresh per team to fill instead of one for the pair.
+    pair = [store.get(side.key or side.abbrev, side.logo) if side.logo else None
+            for side in (fixture.away, fixture.home)]
+    return pair if all(p is not None for p in pair) else None
+
+
+def _result_crests(c, fixture, crests, accent, small, tag):
+    """The finished game as two crests and two scores."""
+    big = get_font("5x7")
+    size = crests[0].height
+    top = 0
+    gap = 3                 # crest to its own score
+    between = 14            # one team to the other
+
+    widths = [big.measure("" if s.score is None else str(s.score)) * 2
+              for s in (fixture.away, fixture.home)]
+    block = sum(size + gap + w for w in widths) + between
+
+    # Centre in what is actually left after the board name, rather than in the
+    # full width -- otherwise the group drifts right and leaves a gutter.
+    reserved = (small.measure(tag[:8]) + 6) if tag else 6
+    x = max(2, 2 + (c.width - reserved - 2 - block) // 2)
+
+    for side, crest, width in zip((fixture.away, fixture.home), crests, widths):
+        c.blit(crest, x, top)
+        x += size + gap
+        if side.score is not None:
+            colour = ("green" if side.winner
+                      else dim("white", 0.55) if _has_winner(fixture)
+                      else "white")
+            c.text(x, top + (size - big.height * 2) // 2, str(side.score),
+                   colour, big, "left", None, 2)
+        x += width + between
+
+    # The board name sits top right and the result under it, so the crests
+    # keep the left of the strip to themselves.
+    if tag:
+        c.text(c.width - 2, top + 1, tag[:8], dim(accent, 0.75), small, "right")
+    won = fixture.won()
+    if won is not None:
+        c.text(c.width - 2, top + size - small.height - 1, "W" if won else "L",
+               "green" if won else dim("white", 0.55), small, "right")
 
 
 def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag, following):

@@ -159,12 +159,16 @@ def espn_payload() -> dict:
                      "winner": winner_home, "curatedRank": {"current": rank},
                      "record": [{"name": "overall", "summary": "2-0"}],
                      "team": {"abbreviation": home, "shortDisplayName": home,
-                              "displayName": f"{home} Team"}},
+                              "displayName": f"{home} Team",
+                              "logos": [{"href": f"http://x/{home}.png",
+                                         "rel": ["full", "dark"]}]}},
                     {"homeAway": "away", "score": {"value": ascore, "displayValue": str(ascore)},
                      "winner": not winner_home and completed,
                      "curatedRank": {"current": 99},
                      "team": {"abbreviation": away, "shortDisplayName": away,
-                              "displayName": f"{away} Team"}},
+                              "displayName": f"{away} Team",
+                              "logos": [{"href": f"http://x/{away}.png",
+                                         "rel": ["full", "dark"]}]}},
                 ],
             }],
         }
@@ -466,3 +470,75 @@ def test_the_board_asks_the_source_every_time(polled):
     assert board.teams == ["UGA", "TEX", "ND", "IU"]
     polled.fixed = ["WASH"]
     assert board.teams[0] == "WASH"
+
+
+# --- crests -----------------------------------------------------------------
+
+def crest_store(tmp_path, keys):
+    """A LogoStore pre-filled with solid squares for `keys`."""
+    from PIL import Image
+    from glance.sources.logos import LogoStore
+    store = LogoStore(tmp_path, size=16)
+    for key in keys:
+        Image.new("RGB", (16, 16), (220, 60, 60)).save(store._rendered(key))
+    return store
+
+
+def finished(espn):
+    return [f for f in espn.fixtures(NOW) if f.final][0]
+
+
+def test_espn_supplies_logo_urls_preferring_the_dark_variant(espn):
+    side = finished(espn).home
+    assert side.logo == ("http://x/WASH.png",)
+    assert side.key == "espn-WASH"
+
+
+def test_crests_are_drawn_when_both_sides_have_one(app, espn, tmp_path):
+    from glance.scenes.scores import _crests
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-WASH", "espn-USU"])
+    assert _crests(ctx, finished(espn)) is not None
+
+
+def test_one_crest_and_one_abbreviation_is_not_a_design(app, espn, tmp_path):
+    """Mixing them reads as a rendering fault. If either side has no usable
+    logo, both sides use text."""
+    from glance.scenes.scores import _crests
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-WASH"])       # only one of the two
+    assert _crests(ctx, finished(espn)) is None
+
+
+def test_both_logos_are_requested_even_though_one_miss_decides_it(app, espn, tmp_path):
+    """Bailing on the first miss queued one download per refresh, so a cold
+    cache took a refresh per team to fill instead of one for the pair."""
+    from glance.scenes.scores import _crests
+    asked: list[str] = []
+
+    class Spy:
+        def get(self, key, urls):
+            asked.append(key)
+            return None
+
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = Spy()
+    assert _crests(ctx, finished(espn)) is None
+    assert len(asked) == 2
+
+
+def test_the_scene_falls_back_to_text_with_no_logo_store(app, espn):
+    from glance.scenes.scores import _crests
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = None
+    assert _crests(ctx, finished(espn)) is None
+
+
+def test_logos_can_be_turned_off(app, espn, tmp_path):
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-WASH", "espn-USU"])
+    ctx.scoreboards = {"ncaa": Board(name="ncaa", source=espn, label="NCAA")}
+    with_logos = REGISTRY["scores"].render(ctx, {"board": "ncaa"})
+    without = REGISTRY["scores"].render(ctx, {"board": "ncaa", "logos": False})
+    assert (with_logos.image.get_flattened_data()
+            != without.image.get_flattened_data())

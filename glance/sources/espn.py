@@ -93,6 +93,34 @@ def _broadcast(comp: dict) -> str:
     return ""
 
 
+def _logos(team: dict) -> tuple[str, ...]:
+    """Candidate logo URLs, best first.
+
+    ESPN's `500-dark` variant is drawn for dark backgrounds and is markedly
+    better on an unlit panel -- Notre Dame's navy monogram becomes gold, Indiana's
+    becomes white. Where no separate dark file exists the two are identical,
+    so preferring it costs nothing.
+    """
+    out: list[str] = []
+    for node in team.get("logos") or []:
+        href = str(node.get("href") or "")
+        if not href:
+            continue
+        rel = [str(r) for r in (node.get("rel") or [])]
+        # Skip the 4096px brand-portal renders: they are huge and several are
+        # drawn on a white or coloured plate, which composites to a bright
+        # rectangle rather than a logo.
+        if "primary_logo" in "".join(rel) or "secondary_logo" in "".join(rel):
+            continue
+        out.append(href)
+        if "dark" in rel:
+            out.insert(0, out.pop())
+    single = str(team.get("logo") or "")
+    if single and single not in out:
+        out.append(single)
+    return tuple(out)
+
+
 def _side(node: dict) -> Side:
     team = node.get("team") or {}
     rank = (node.get("curatedRank") or {}).get("current")
@@ -104,6 +132,8 @@ def _side(node: dict) -> Side:
         record=_record(node),
         rank=None if rank in (None, UNRANKED) else int(rank),
         winner=bool(node.get("winner", False)),
+        logo=_logos(team),
+        key=f"espn-{team.get('id') or team.get('abbreviation') or '?'}",
     )
 
 

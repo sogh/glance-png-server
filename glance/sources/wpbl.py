@@ -44,7 +44,7 @@ GAME_FIELDS = ",".join((
     "acf.away_team", "acf.home_team", "acf.away_score", "acf.home_score",
     "acf.game_broadcast_tv", "acf.game_broadcast_stream",
 ))
-TEAM_FIELDS = "id,title,slug,acf.team_abbreviation"
+TEAM_FIELDS = "id,title,slug,acf.team_abbreviation,acf.team_logo"
 
 STATE = {
     "scheduled": PRE,
@@ -98,6 +98,7 @@ class WpblSource:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.games_file = self.cache_dir / "wpbl-games.json"
         self.teams_file = self.cache_dir / "wpbl-teams.json"
+        self.media_file = self.cache_dir / "wpbl-media.json"
         self.last_error: str | None = None
         self._lock = threading.Lock()
 
@@ -130,14 +131,36 @@ class WpblSource:
             self.last_error = f"{type(exc).__name__}: {exc}"
             return cached
 
+    def _media(self, ids: list[int]) -> dict[int, str]:
+        """Attachment id -> file url.
+
+        The teams carry their logo as a media id rather than a url, so it
+        takes a second call. One call for all four, cached as long as the
+        teams themselves.
+        """
+        if not ids:
+            return {}
+        raw = self._fetch(self.media_file, f"{BASE}/media",
+                          {"include": ",".join(str(i) for i in sorted(ids)),
+                           "per_page": 50, "_fields": "id,source_url"},
+                          TEAM_TTL) or []
+        return {int(n.get("id", 0)): str(n.get("source_url") or "")
+                for n in raw if n.get("source_url")}
+
     def _teams(self) -> dict[int, Side]:
         raw = self._fetch(self.teams_file, f"{BASE}/wpbl_team",
                           {"per_page": 50, "_fields": TEAM_FIELDS}, TEAM_TTL) or []
+        wanted = [i for i in (_int(acf(n, "team_logo")) for n in raw) if i]
+        media = self._media(wanted)
         out: dict[int, Side] = {}
         for node in raw:
             title = (node.get("title") or {}).get("rendered") or node.get("slug") or ""
             abbrev = acf(node, "team_abbreviation") or str(title)[:3].upper()
-            out[int(node.get("id", 0))] = Side(abbrev=str(abbrev), name=str(title))
+            team_id = int(node.get("id", 0))
+            url = media.get(_int(acf(node, "team_logo")) or -1, "")
+            out[team_id] = Side(abbrev=str(abbrev), name=str(title),
+                                logo=(url,) if url else (),
+                                key=f"wpbl-{team_id}")
         return out
 
     def _ttl(self, payload: Any) -> float:
@@ -193,8 +216,10 @@ class WpblSource:
             state = STATE.get(str(acf(node, "game_status") or "").lower(), OTHER)
             home_score, away_score = _int(acf(node, "home_score")), _int(acf(node, "away_score"))
 
-            home = Side(home.abbrev, home.name, home_score)
-            away = Side(away.abbrev, away.name, away_score)
+            home = Side(home.abbrev, home.name, home_score,
+                        logo=home.logo, key=home.key)
+            away = Side(away.abbrev, away.name, away_score,
+                        logo=away.logo, key=away.key)
             if state == FINAL and home_score is not None and away_score is not None:
                 home.winner, away.winner = home_score > away_score, away_score > home_score
 

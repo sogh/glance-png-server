@@ -99,6 +99,7 @@ class RenderContext:
     width_override: int | None = None
     brightness: float | None = None   # None = use the schedule
     scoreboards: dict[str, Any] = field(default_factory=dict)
+    logos: Any = None                 # sources.logos.LogoStore
     mode_set: Any = None              # sources.modes.ModeSet
     _modes: frozenset[str] | None = field(default=None, repr=False, compare=False)
 

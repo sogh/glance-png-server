@@ -31,6 +31,8 @@ class Side:
     record: str = ""                  # "3-1"
     rank: int | None = None           # AP/coaches poll, where a league has one
     winner: bool = False
+    logo: tuple[str, ...] = ()        # candidate URLs, best first
+    key: str = ""                     # stable cache key for the logo
 
     @property
     def ranked(self) -> bool:

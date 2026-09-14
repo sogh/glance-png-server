@@ -923,6 +923,37 @@ So the source sets **no** `User-Agent` header at all and lets httpx send its
 own. Adding a realistic browser one — the obvious "fix" if this ever starts
 failing — is what breaks it.
 
+#### Team crests
+
+Both providers supply logo URLs, and the `scores` panel draws them at 16px
+(`panel.logo_size`). Three things make that work, and one decides when to give
+up.
+
+**Scale down by area averaging.** Everywhere else here scaling is nearest and
+hard-edged, because enlarging pixel art any other way makes mud. Reducing
+500px to 16 the rule inverts — nearest keeps whichever pixels happen to land
+on the sample grid and turns a thin outline into dashes.
+
+**Prefer ESPN's `500-dark` variant.** It is drawn for dark backgrounds, which
+is what an unlit panel is. Notre Dame's peak luminance goes 87 → 173, Indiana's
+41 → 255. Where no separate dark file exists the two are identical.
+
+**Normalise the peak.** These files are built for a bright screen. Arkansas's
+dark red hog peaks at 85 of 255 on black and is invisible; lifting the
+brightest pixel towards 230 makes it a legible silhouette. The gain is clamped
+so an almost-empty image is not amplified into noise.
+
+**And then give up if it still does not read.** If too few pixels are lit the
+logo is a smudge at this size, so the panel prints the abbreviation instead —
+which always reads. That decision is per fixture, not per team: one crest
+beside one abbreviation looks like a bug, so if either side has no usable
+logo, both sides use text.
+
+Fetching **never blocks a render**. The device gives up after about four
+seconds and a cold cache means several downloads, so a miss returns nothing,
+the panel draws text, and the download happens on a background thread. The
+next refresh has the crest. Set `logos: false` on the scene to turn them off.
+
 #### WPBL: a real feed, entered by hand
 
 The WPBL played its first season in 2026. Nobody carries it: ESPN's API has

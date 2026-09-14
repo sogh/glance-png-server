@@ -149,6 +149,22 @@ def test_preview_page_renders(client):
     assert "/c/main.png?peek=1" in r.text
 
 
+def test_the_preview_shows_every_entry_in_a_channel(client):
+    """Not just whichever one happens to be up. A channel holding two boards
+    rendered one of them and the other was nowhere on the page."""
+    r = client.get("/preview")
+    # The `main` channel of the test project holds holiday, todos and clock.
+    for ref in ("/s/holiday.png", "/s/todos.png", "/s/clock.png"):
+        assert ref in r.text, ref
+
+
+def test_the_preview_carries_each_entry_own_params(client):
+    """Two entries of the same scene differ only by their params, so a link
+    without them renders the same picture twice."""
+    r = client.get("/preview")
+    assert "count=3" in r.text
+
+
 def test_root_redirects_to_the_preview(client):
     assert client.get("/", follow_redirects=False).status_code in (302, 307)
 

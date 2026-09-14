@@ -11,6 +11,7 @@ import logging
 import os
 import secrets
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -370,11 +371,25 @@ def create_app(config_path: str | None = None) -> FastAPI:
         parts: list[str] = []
         for name, meta in info["channels"].items():
             avail = ", ".join(meta["available"]) or "nothing available"
+            # The current frame, and then every entry in the rotation. Showing
+            # only the current one made a channel look like it held a single
+            # scene: a two-board `scores` channel rendered whichever board was
+            # up and the other was nowhere on the page.
+            shots = [frame(f"/c/{name}.png?peek=1", f"{name} (current)")]
+            for entry in glance.settings.channels.get(name, []):
+                if not entry.enabled:
+                    continue
+                note = " ".join(
+                    filter(None, ("takeover" if entry.takeover else "",
+                                  f"when {entry.when}" if entry.when else ""))
+                )
+                shots.append(frame(f"/s/{entry.ref}.png?{urlencode(entry.params)}",
+                                   entry.key, note))
             parts.append(
                 f"<h2>channel <code>{name}</code></h2>"
                 f'<p class="meta">/c/{name}.png &middot; {len(meta["available"])} '
                 f"of {meta['configured']} showing &middot; {avail}</p>"
-                + frame(f"/c/{name}.png?peek=1", f"{name} (current)")
+                f'<div class="grid">{"".join(shots)}</div>'
             )
 
         def scene_url(sid: str) -> str:

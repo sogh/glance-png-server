@@ -24,6 +24,7 @@ from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
 from .sources.espn import EspnSource
+from .sources.logos import LogoStore
 from .sources.modes import ModeSet
 from .sources.scores import Board
 from .sources.wpbl import WpblSource
@@ -61,6 +62,8 @@ class GlanceApp:
         self.baseball = self._build_baseball(settings)
         self.homeassistant = self._build_ha(settings)
         self.scoreboards = self._build_scoreboards(settings)
+        self.logos = LogoStore(settings.cache_dir,
+                               size=int((settings.raw.get("panel") or {}).get("logo_size", 16)))
         self._holidays: list[Holiday] = []
         self._holidays_mtime: float | None = None
         self._holiday_lock = threading.Lock()
@@ -336,6 +339,7 @@ class GlanceApp:
             todos=self.todos,
             holidays=self.holidays,
             scoreboards=self.scoreboards,
+            logos=self.logos,
             mode_set=self.modes,
         )
 
