@@ -65,8 +65,10 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
 @register("static", available=_available, description="A PNG file from assets/static/",
           params=[
               Param("name", "select", None, options="@static", help="Which file"),
-              Param("align", "select", "center", options=["left", "center", "right"]),
-              Param("valign", "select", "middle", options=["top", "middle", "bottom"]),
+              Param("align", "select", "center", options=["left", "center", "right"],
+                    help="Where the image sits if it is narrower than the strip"),
+              Param("valign", "select", "middle", options=["top", "middle", "bottom"],
+                    help="Where the image sits if it is shorter than 32px"),
               Param("caption", "text", None, help="Text bar along the bottom"),
               Param("caption_color", "color", "white", options="@colors"),
               Param("background", "color", "black", options="@colors"),

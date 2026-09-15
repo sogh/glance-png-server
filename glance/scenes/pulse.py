@@ -65,11 +65,14 @@ def _draw(c: Canvas, text: str, colour: Any, x: int, y: int, font, scale: int,
               Param("mode", "select", "gradient", options=["gradient", "pulse"],
                     help="gradient ramps across the letters; pulse animates "
                          "(this panel does not decode APNG)"),
-              Param("layout", "select", "column", options=["column", "row"]),
+              Param("layout", "select", "column", options=["column", "row"],
+                    help="Stack the names, or set them side by side"),
               Param("from", "color", "white", options="@colors",
                     help="Colour each name starts at"),
-              Param("font", "select", "5x7", options="@fonts"),
-              Param("scale", "number", None, minimum=1, maximum=4),
+              Param("font", "select", "5x7", options="@fonts",
+                    help="Typeface for the names"),
+              Param("scale", "number", None, minimum=1, maximum=4,
+                    help="Text size; blank fits the largest that will go"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_pulse(ctx: RenderContext, params: dict[str, Any]) -> Canvas:

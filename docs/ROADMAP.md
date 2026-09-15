@@ -6,9 +6,10 @@ Decided: **MIT licensed, aimed at self-hosting on a private LAN.** Anyone who
 wants to put it on the public internet may, but that is not the case being
 designed for.
 
-The audit that matters: 6,100 lines, 13 pinned dependencies, no native
-extensions, and almost nothing hard-coded. Everything personal lives in
-`config/settings.yaml` and `.env`. That is already a portable shape.
+The audit that matters: ~9,900 lines across 53 modules, 6,000 lines of tests,
+**9** pinned dependencies, no native extensions, and almost nothing
+hard-coded. Everything personal lives in `config/settings.yaml` and `.env`.
+That is already a portable shape.
 
 ### Three walls a stranger hits, in order
 
@@ -44,11 +45,35 @@ and a small YAML file.
 
 ### README split
 
-The README is currently an operations manual with one household's IP addresses
-and hostnames throughout. A stranger needs a short front page — what this is,
-how to run it — with the LAN and DNS material moved into a deployment guide.
+Partly done. The reference material now lives in `docs/CONFIG.md`,
+`docs/SCENES.md` and `docs/API.md`, which is most of the bulk. What remains:
+the README is still an operations manual with **one household's IP addresses
+and hostnames throughout** — `192.168.1.50`, `glance.example.com`, a UniFi
+gateway. A stranger needs those replaced with placeholders and the LAN/DNS
+material moved into a deployment guide. That is the last thing standing
+between this and being publishable.
 
 ---
+
+## Documentation
+
+Done: a generated scene and parameter reference (`tools/gendocs.py` →
+`docs/SCENES.md`, with a test that fails when it drifts), a configuration
+reference covering every key and environment variable, and an HTTP reference
+covering every route. Every scene parameter now carries help text, which the
+editor shows and the generator picks up.
+
+Still thin:
+
+- **No screenshots anywhere.** A panel server whose docs contain no pictures
+  of panels is a strange artefact. The preview page renders them all already;
+  the missing piece is committing a few PNGs and referencing them.
+- **No CONTRIBUTING or scene-authoring walkthrough.** "Adding a scene" in the
+  README is a code sketch, not a guide.
+- **Personal data in the tracked tree.** `data/reminders.json` and
+  `data/overrides.json` are versioned but excluded from deploys, so the repo
+  copy is both stale and the wrong shape for a stranger. They want
+  gitignoring, with an `.example` shipped instead — as `.env` already does.
 
 ## Open items, unrelated to packaging
 

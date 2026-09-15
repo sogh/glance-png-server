@@ -222,7 +222,8 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("weather", "bool", True,
                     help="Cloud, rain and fog from the current conditions"),
               Param("texture", "bool", True, help="Draw the moon's dark plains"),
-              Param("stars", "number", 26, minimum=0, maximum=80),
+              Param("stars", "number", 26, minimum=0, maximum=80,
+                    help="Stars at night; cloud cover thins them"),
           ])
 def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()

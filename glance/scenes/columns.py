@@ -130,13 +130,14 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
           params=[
               Param("calendar", "select", None, options="@calendars",
                     help="Which feed, or blank for all"),
-              Param("columns", "number", 3, minimum=1, maximum=6),
+              Param("columns", "number", 3, minimum=1, maximum=6,
+                    help="How many day columns across the strip"),
               Param("skip_columns", "number", 0, minimum=0, maximum=9,
                     help="Start this many columns in. Pair two panels with 0 "
                          "and 3 and they run continuously, whatever the packing."),
               Param("days", "number", None, minimum=1, maximum=12,
                     help="Distinct days to consider; defaults to the column count"),
-              Param("hour24", "bool", False),
+              Param("hour24", "bool", False, help="24-hour clock"),
               Param("wrap", "bool", True,
                     help="Let a long title use a second row, but only when "
                          "no event would be pushed off the column"),
@@ -147,7 +148,8 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("from_days", "number", 0, minimum=0, maximum=30,
                     help="Start this many days ahead. 0 is today; 3 skips the "
                          "near term a companion panel already covers."),
-              Param("lookahead_days", "number", 14, minimum=1, maximum=90),
+              Param("lookahead_days", "number", 14, minimum=1, maximum=90,
+                    help="How far ahead to look for events"),
           ])
 def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()

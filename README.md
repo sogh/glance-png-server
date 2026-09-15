@@ -18,10 +18,19 @@ endpoint.
 ## Documentation
 
 - **[docs/DEVICE.md](docs/DEVICE.md)** — what the Glance Scroll actually does,
-  including the undocumented behaviour found by experiment
+  including the undocumented behaviour found by experiment. **Read this first
+  if the setup app is refusing your URL.**
+- **[docs/CONFIG.md](docs/CONFIG.md)** — every `settings.yaml` key, every
+  environment variable, every file the server reads or writes
+- **[docs/SCENES.md](docs/SCENES.md)** — every scene and every parameter.
+  Generated from the code by `tools/gendocs.py`, so it cannot drift
+- **[docs/API.md](docs/API.md)** — every HTTP route
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — code map and the
   reasoning behind the non-obvious decisions
 - **[docs/ROADMAP.md](docs/ROADMAP.md)** — packaging plan and open items
+
+This README is the tour: what the thing is, how the pieces fit, and why each
+one is the way it is. The four references above are for looking things up.
 
 ## What the device actually requires
 
@@ -426,12 +435,17 @@ an entry actually mentions one, and at most once per request.
 
 ## Scenes
 
+Full parameter lists for all of these are in **[docs/SCENES.md](docs/SCENES.md)**.
+
 | Scene | Shows | Available when |
 |---|---|---|
 | `banner` | Title card — big line, small line, evergreens | always |
 | `scores` | Result + next fixture from a configured scoreboard | the board has a game |
 | `rankings` | The top of a poll, as many as fit | the poll is available |
 | `language` | A word in another language, and what it means | the deck has words |
+| `static:<name>` | A PNG from `assets/static/` | the file exists |
+| `alignment` | Test card — are the top and bottom rows reaching the panel? | always |
+| `sprites` | Every sprite at once, for checking the art | always |
 | `holiday` | Active holiday, generated card or your own art | a holiday window is open |
 | `agenda` | Next calendar event(s) | there's an upcoming event |
 | `today-agenda` | What's left on today's calendar | (always; says "nothing today") |

@@ -13,7 +13,7 @@ from .base import Param, RenderContext, register
 
 @register("clock", description="Time and date",
           params=[
-              Param("hour24", "bool", False),
+              Param("hour24", "bool", False, help="24-hour clock"),
               Param("date", "bool", True, help="Show the date line"),
               Param("lead", "number", 0, minimum=0, maximum=900,
                     help="Seconds to shift forward; set to half your refresh "
@@ -105,7 +105,8 @@ def render_date(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
               Param("sub", "text", None, help="Smaller line beneath"),
               Param("color", "color", "white", options="@colors"),
               Param("sub_color", "color", None, options="@colors"),
-              Param("font", "select", "5x7", options="@fonts"),
+              Param("font", "select", "5x7", options="@fonts",
+                    help="Typeface for the body text"),
               Param("scale", "number", None, minimum=1, maximum=4,
                     help="Blank fits it automatically"),
               Param("background", "color", "black", options="@colors"),

@@ -130,6 +130,17 @@ slots at different channels gives both.
 `skip_columns`, because whether the near panel spilled is exactly what decides
 where the far one should start. A day offset cannot know that.
 
+## Keeping the docs true
+
+`docs/SCENES.md` is generated from the scene registry by `tools/gendocs.py`,
+and a test runs it with `--check`. A hand-maintained list of 27 scenes and 163
+parameters is a list that is wrong within a month; the param schema already
+exists to draw the editor's controls and validate a save, so the reference
+comes from the same place.
+
+`docs/CONFIG.md` and `docs/API.md` are hand-written, and every default and
+response shape in them was checked against the running server when written.
+
 ## A note on testing pictures
 
 `Canvas.to_ascii()` thresholds every pixel to lit or unlit. That is exactly

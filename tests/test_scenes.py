@@ -295,3 +295,60 @@ def test_the_alignment_card_fills_every_row_edge(app, now):
     c, _ = app.render_scene("alignment", {}, app.context(now, brightness=1.0))
     for y in (0, 31):
         assert sum(c.image.getpixel((0, y))) > 0, f"row {y} left edge unlit"
+
+
+def test_the_scene_reference_is_current():
+    """docs/SCENES.md is generated from the registry. A new scene or a renamed
+    parameter should fail here rather than quietly leave the docs wrong."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, str(root / "tools" / "gendocs.py"), "--check"],
+        capture_output=True, text=True, cwd=root)
+    assert result.returncode == 0, (
+        result.stderr.strip() or "docs/SCENES.md is out of date; "
+        "run: python tools/gendocs.py")
+
+
+def test_no_broken_internal_doc_links():
+    """A reference nobody can follow is worse than no reference."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    broken = []
+    for md in sorted(root.glob("*.md")) + sorted(root.glob("docs/*.md")):
+        text = md.read_text(encoding="utf-8")
+        for label, target in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", text):
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            path, _, anchor = target.partition("#")
+            if not path:
+                continue
+            resolved = (md.parent / path).resolve()
+            if not resolved.exists():
+                broken.append(f"{md.name}: [{label}]({target})")
+                continue
+            if anchor:
+                body = resolved.read_text(encoding="utf-8")
+                slugs = {
+                    re.sub(r"[^a-z0-9 -]", "", h.lower()).strip().replace(" ", "-")
+                    for h in re.findall(r"^#{1,6}\s+(.*)$", body, re.M)
+                }
+                if anchor not in slugs:
+                    broken.append(f"{md.name}: [{label}]({target}) -- no anchor")
+    assert not broken, broken
+
+
+def test_every_scene_parameter_explains_itself():
+    """The help text draws the control in /edit and fills docs/SCENES.md, so a
+    parameter without it is undocumented in two places at once."""
+    from glance.scenes import REGISTRY
+
+    bare = [f"{sid}.{p.name}" for sid in sorted(REGISTRY)
+            for p in getattr(REGISTRY[sid], "params", [])
+            if not p.help and p.type != "color"]
+    assert not bare, bare
