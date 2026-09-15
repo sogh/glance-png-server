@@ -77,6 +77,8 @@ AGENDA_PARAMS = [
     Param("hour24", "bool", False, help="24-hour clock"),
     Param("lookahead_days", "number", 14, minimum=1, maximum=90),
     Param("accent", "color", "amber", options="@colors"),
+    Param("time_color", "color", None, options="@colors",
+          help="The time, drawn apart from the title; defaults to the accent"),
     Param("location", "bool", True, help="Show the location under the title"),
     Param("empty", "text", None, help="What to say when there is nothing"),
 ]
@@ -98,7 +100,8 @@ def render_agenda(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         return c
 
     if count > 1:
-        return _render_list(c, ctx, events[:count], hour24, accent)
+        return _render_list(c, ctx, events[:count], hour24, accent,
+                            params.get("time_color") or accent)
     return _render_hero(c, ctx, events[0], hour24, accent, params)
 
 
@@ -158,13 +161,15 @@ def _render_hero(c: Canvas, ctx: RenderContext, ev, hour24: bool, accent: str,
     return c
 
 
-def _render_list(c: Canvas, ctx: RenderContext, events, hour24: bool, accent: str) -> Canvas:
+def _render_list(c: Canvas, ctx: RenderContext, events, hour24: bool, accent: str,
+                 time_colour: str | None = None) -> Canvas:
     """Two or three events stacked, time column on the left.
 
     Rows that are not today get a right-hand day badge. Without it a recurring
     9:30 standup renders identically on three consecutive lines, which reads as
     a bug rather than as three days of the same meeting.
     """
+    time_colour = time_colour or accent
     rows = min(len(events), 3)
     step = 10 if rows >= 3 else 12
     top = (c.height - (rows * step - (step - 7))) // 2
@@ -179,12 +184,15 @@ def _render_list(c: Canvas, ctx: RenderContext, events, hour24: bool, accent: st
             digits, meridiem = fmt_time(ev.start, hour24)
             label = digits if hour24 else f"{digits}{meridiem[0].lower()}"
 
-        color = "green" if ev.is_now(ctx.now) else (ev.style.color or accent)
-        c.text(1, y, label, color, "5x7", max_width=time_col - 3)
+        # The time carries its own colour, apart from the title -- see the
+        # note in columns.py; both used to come out white.
+        stamp_colour = "green" if ev.is_now(ctx.now) else time_colour
+        c.text(1, y, label, stamp_colour, "5x7", max_width=time_col - 3)
 
         badge = "" if ev.start.date() == ctx.today else day_label(ev.start, ctx.now)
         badge_w = small.measure(badge) + 4 if badge else 0
-        title_color = dim("white", 0.55) if ev.style.dim else "white"
+        title_color = (dim("white", 0.55) if ev.style.dim
+                       else ev.style.color or "white")
         c.text(time_col, y, ev.summary, title_color, "5x7",
                max_width=c.width - time_col - 2 - badge_w)
         if badge:

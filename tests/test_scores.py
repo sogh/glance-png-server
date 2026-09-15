@@ -703,15 +703,39 @@ def test_the_scoreline_stacks_crest_then_name_then_next(app, espn, tmp_path):
     assert nxt[0] > names[1]
 
 
-def test_the_next_fixture_sits_to_the_right_under_the_crests(app, espn, tmp_path):
-    """Moved down and right: the result is the headline, the next fixture is
-    the footnote."""
-    c = REGISTRY["scores"].render(crest_ctx(app, espn, tmp_path), {"board": "ncaa"})
-    row = bands(c)[-1]
-    lit = [x for x in range(c.width) for y in range(row[0], row[1] + 1)
-           if c.image.getpixel((x, y)) != (0, 0, 0)]
-    assert max(lit) > c.width - 12, "should reach the right edge"
-    assert min(lit) > c.width // 3, "should not start at the left margin"
+def test_every_row_keeps_clear_of_both_edges(app, espn, tmp_path):
+    """The device pans straight from one app into the next, so a pane inked
+    end to end has nothing to say where it stops and its neighbour starts."""
+    margin = 8
+    c = REGISTRY["scores"].render(crest_ctx(app, espn, tmp_path),
+                                  {"board": "ncaa", "margin": margin})
+    for row in bands(c):
+        lit = [x for x in range(c.width) for y in range(row[0], row[1] + 1)
+               if c.image.getpixel((x, y)) != (0, 0, 0)]
+        assert min(lit) >= margin, f"row {row} runs into the left margin"
+        assert max(lit) <= c.width - margin, f"row {row} runs into the right margin"
+
+
+def test_the_margin_is_a_floor_that_pushes_content_out(app, espn, tmp_path):
+    """Narrow content already clears the margin, so the margin only bites on a
+    wide row -- where it drops the broadcast rather than run into the gutter."""
+    from glance.canvas import Canvas
+    from glance.fonts import get_font
+    from glance.scenes.scores import _next
+
+    wide = fixture("LAA", "SEA", state=PRE, hours=3)
+    wide.broadcast = "ROOT SPORTS NORTHWEST"
+    widths = {}
+    for margin in (0, 30):
+        c = Canvas(width=192)
+        _next(c, wide, NOW, 20, "amber", get_font("3x5"), True, True, "", 1,
+              align="center", margin=margin)
+        lit = [x for x in range(192) for y in range(20, 32)
+               if c.image.getpixel((x, y)) != (0, 0, 0)]
+        widths[margin] = max(lit) - min(lit)
+        assert min(lit) >= margin
+        assert max(lit) <= 191 - margin
+    assert widths[30] < widths[0], "a tight margin should have shed something"
 
 
 def test_names_can_be_turned_off(app, espn, tmp_path):
@@ -778,10 +802,9 @@ def test_the_board_name_sits_top_left(app, espn, tmp_path):
 
 # --- placement and the day word ---------------------------------------------
 
-def test_the_crest_block_does_not_move_when_the_label_is_longer(app):
-    """Centring on the gap between the label and the result let a long board
-    name shove the crests right, so MARINERS sat noticeably further over than
-    WPBL. They centre on the panel now."""
+def test_the_row_stays_balanced_whatever_the_label_says(app):
+    """Name, crests and result are one group and the group is centred, so a
+    longer board name moves the crests but leaves the two gutters even."""
     from PIL import Image
     from glance.canvas import Canvas
     from glance.fonts import get_font
@@ -790,14 +813,13 @@ def test_the_crest_block_does_not_move_when_the_label_is_longer(app):
     crests = [Image.new("RGB", (14, 14), (200, 0, 0))] * 2
     done = fixture("LA", "NY", 7, 9, FINAL)
 
-    def first_crest_x(tag):
+    for tag in ("WPBL", "MARINERS"):
         c = Canvas(width=192)
         _result_crests(c, done, crests, "amber", get_font("3x5"), tag, True, False)
-        # The crests are the only pure red thing on the panel.
-        return min(x for x in range(192) for y in range(14)
-                   if c.image.getpixel((x, y)) == (200, 0, 0))
-
-    assert first_crest_x("WPBL") == first_crest_x("MARINERS")
+        lit = [x for x in range(192) for y in range(14)
+               if c.image.getpixel((x, y)) != (0, 0, 0)]
+        left, right = min(lit), 191 - max(lit)
+        assert abs(left - right) <= 3, f"{tag}: gutters {left} vs {right}"
 
 
 def test_a_long_label_still_never_overlaps_the_crests(app):

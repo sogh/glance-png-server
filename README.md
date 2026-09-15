@@ -964,11 +964,13 @@ footnote. A name that will not fit its column gives way to the abbreviation
 rather than being cut off: `LOS ANGE…` tells you less than `LA`. Turn the
 names off with `names: false`, or change the crest size with `crest: 16`.
 
-The board name sits **top left**: the panel scrolls, so that is where the eye
-lands, and a label trailing off the far end is read last or not at all. The
-crest block centres on the panel rather than on the space left beside the
-label, or a long name like `MARINERS` shoves it visibly further right than a
-short one like `WPBL`.
+The board name, the crests and the result are laid out as **one group, and
+that group is centred** (`margin`, default 8px). Pinned to the edges instead,
+the pane is inked from end to end — and since the device pans straight from
+one app into the next, there is nothing to say where one stops and the other
+starts. The leftover blank lands at the two edges where it does some good. On
+a row too wide to fit the margin, the broadcast is dropped and then the day;
+the gutter is the point.
 
 On the next-fixture line the **day is drawn in its own colour** — `TODAY` in
 green (`today_color`), any other day in the accent — so it separates from the

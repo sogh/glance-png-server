@@ -141,6 +141,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="Let a long title use a second row, but only when "
                          "no event would be pushed off the column"),
               Param("accent", "color", "amber", options="@colors"),
+              Param("time_color", "color", None, options="@colors",
+                    help="The time, drawn apart from the title; defaults to "
+                         "the accent"),
               Param("from_days", "number", 0, minimum=0, maximum=30,
                     help="Start this many days ahead. 0 is today; 3 skips the "
                          "near term a companion panel already covers."),
@@ -151,6 +154,12 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c.clear(params.get("background", "black"))
     small = get_font("3x5")
     accent = params.get("accent", "amber")
+    # The time gets its own colour so the eye can separate "when" from "what"
+    # without reading either. Previously both came out white: the stamp took
+    # the calendar's configured colour, which is white, and the title was
+    # hardcoded to it -- so the one field that was meant to stand apart did
+    # not, and a #tag tinted the clock instead of the event.
+    time_colour = params.get("time_color") or accent
     hour24 = bool(params.get("hour24", False))
 
     count = max(1, int(params.get("columns", 3)))
@@ -224,8 +233,8 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         row = 0
         for index, event in enumerate(shown):
             y = FIRST_ROW_Y + row * ROW_STEP
-            colour = "green" if event.is_now(ctx.now) else (event.style.color or accent)
-            c.text(x + 1, y, stamps[index], colour, small)
+            stamp_colour = "green" if event.is_now(ctx.now) else time_colour
+            c.text(x + 1, y, stamps[index], stamp_colour, small)
 
             # The badge shares the final row, so its width comes out of that
             # title's budget rather than being drawn over it.
@@ -235,7 +244,8 @@ def render_columns(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
                      if allowance[index] > 1 else
                      [small.truncate(event.summary, budget)])
 
-            title_colour = dim("white", 0.55) if event.style.dim else "white"
+            title_colour = (dim("white", 0.55) if event.style.dim
+                            else event.style.color or "white")
             for offset, line in enumerate(lines):
                 reserve = badge_w if (badge and row + offset == ROWS_PER_COLUMN - 1) else 0
                 c.text(title_xs[index], y + offset * ROW_STEP, line,

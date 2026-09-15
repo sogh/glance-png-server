@@ -313,3 +313,49 @@ def test_wrapped_rows_stay_inside_the_column(app):
     # The divider column between panel 1 and 2 is at x = 63.
     for y in range(7, 32):
         assert sum(c.image.getpixel((62, y))) == 0, f"bled into the divider at row {y}"
+
+
+# --- telling the time from the title ----------------------------------------
+
+def colours(canvas):
+    return {p for p in canvas.image.get_flattened_data() if p != (0, 0, 0)}
+
+
+def test_the_time_is_not_the_same_colour_as_the_event(app):
+    """Both used to come out white: the stamp took the calendar's configured
+    colour, which is white, and the title was hardcoded to it -- so the one
+    field meant to stand apart did not."""
+    from glance.palette import parse
+    c = render(app, [ev(0, 9, 30, "Standup")], {"accent": "amber"})
+    present = colours(c)
+    assert parse("amber") in present, "the time should carry the accent"
+    assert parse("white") in present, "the title should stay white"
+
+
+def test_the_time_colour_is_configurable(app):
+    from glance.palette import parse
+    c = render(app, [ev(0, 9, 30, "Standup")],
+               {"accent": "amber", "time_color": "sky"})
+    assert parse("sky") in colours(c)
+    assert parse("white") in colours(c)
+
+
+def test_a_tag_tints_the_event_not_the_clock(app):
+    """A #red on an entry should make the entry stand out. It used to colour
+    the time instead, which is the opposite of what anyone would expect."""
+    from glance.palette import parse
+    from glance.sources.tags import Style
+
+    tagged = ev(0, 9, 30, "Dentist")
+    tagged.style = Style(color="red")
+    c = render(app, [tagged], {"accent": "amber", "time_color": "amber"})
+    present = colours(c)
+    assert parse("red") in present, "the title should be red"
+    assert parse("amber") in present, "the time should still be the accent"
+
+
+def test_an_event_happening_now_still_turns_the_time_green(app):
+    from glance.palette import parse
+    live = ev(0, 6, 30, "Standup")          # started an hour before NOW
+    assert live.is_now(NOW)
+    assert parse("green") in colours(render(app, [live], {"accent": "amber"}))

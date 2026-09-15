@@ -121,6 +121,9 @@ def _draw_runs(c, x: int, y: int, runs, font, gap: int, scale: int = 1) -> int:
               Param("names", "bool", True, help="Short team names under the scores"),
               Param("today_color", "color", "green", options="@colors",
                     help="Colour for TODAY on the next-fixture line"),
+              Param("margin", "number", 8, minimum=0, maximum=40,
+                    help="Blank kept at each edge, so the pane separates from "
+                         "its neighbours as the device pans past"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -152,6 +155,7 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         return _live(c, snap["live"], accent, small, show_tv, tag, show_rank)
 
     size = int(params.get("crest", 14) or 14)
+    margin = max(0, int(params.get("margin", 8) or 0))
     crests = (_crests(ctx, snap["last"], size) if params.get("logos", True)
               else None)
 
@@ -162,15 +166,15 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         # sits under it and to the right -- the result reads first, the next
         # fixture second.
         y = _result_crests(c, snap["last"], crests, accent, small, tag,
-                           show_rank, bool(params.get("names", True)))
-        align = "right"
+                           show_rank, bool(params.get("names", True)), margin)
+        align = "center"
     elif snap["last"]:
         _result(c, snap["last"], ctx.now, y, accent, small, tag, show_rank)
         y += 11
     if snap["next"]:
         _next(c, snap["next"], ctx.now, y, accent, small, show_tv, show_rank,
               tag if not snap["last"] else "", following, align,
-              str(params.get("today_color", "green")))
+              str(params.get("today_color", "green")), margin)
     elif snap["last"] and show_tv and snap["last"].broadcast:
         c.text(2, y + 2, snap["last"].broadcast, dim("grey", 0.85), small,
                max_width=c.width - 4)
@@ -270,12 +274,18 @@ def _crests(ctx, fixture, size=None):
 
 
 def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
-                   names=True):
+                   names=True, margin=8):
     """The finished game as two crests, two scores and two names.
 
     Returns the y the next line should start at. Each team is one column --
     rank, crest, score on top, name centred underneath -- because a name
     hanging off the side of its own crest belongs to nobody in particular.
+
+    The board name, the crests and the result are laid out as one group and
+    that group is centred, rather than the name being pinned to the left edge
+    and the result to the right. Pinned to the edges the pane is inked from
+    end to end, and on a device that pans straight from one app into the next
+    there is nothing to say where one stops and the other starts.
     """
     big = get_font("5x7")
     size = crests[0].height
@@ -294,17 +304,18 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
     columns = [pad + size + gap + w for pad, w in zip(lead, widths)]
     block = sum(columns) + between
 
-    # The board name sits top LEFT. The panel scrolls, so the left edge is
-    # what is read first and the label belongs where the eye lands, not
-    # trailing off the far end.
-    left_margin = (2 + small.measure(tag[:8]) + 6) if tag else 2
-    right_margin = small.measure("W") + 4 if fixture.won() is not None else 2
+    won = fixture.won()
+    label = tag[:8] if tag else ""
+    lead_w = (small.measure(label) + 8) if label else 0
+    trail_w = (small.measure("W") + 8) if won is not None else 0
 
-    # Centred on the PANEL, not on the gap between the label and the result --
-    # centring on the gap let a long label shove the crests right, so MARINERS
-    # sat noticeably further over than WPBL. Clamped so it still clears both.
-    x = max(left_margin, min((c.width - block) // 2,
-                             c.width - right_margin - block))
+    # One group: name, crests, result. Centred together, so the blank left
+    # over lands at the two edges where it does some good.
+    x = max(margin, (c.width - (lead_w + block + trail_w)) // 2)
+    if label:
+        c.text(x, top + (row - small.height) // 2, label, dim(accent, 0.75), small)
+    x += lead_w
+    crest_left = x
 
     for side, crest, width, rank, pad, column in zip(sides, crests, widths,
                                                      ranks, lead, columns):
@@ -331,13 +342,10 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
                    dim("white", 0.8), small, "center", room)
         x += between
 
-    if tag:
-        c.text(2, top + 1, tag[:8], dim(accent, 0.75), small)
-    won = fixture.won()
     if won is not None:
-        c.text(c.width - 2, top + (row - small.height) // 2,
+        c.text(crest_left + block + 8, top + (row - small.height) // 2,
                "W" if won else "L",
-               "green" if won else dim("white", 0.55), small, "right")
+               "green" if won else dim("white", 0.55), small)
     return row + (small.height + 3 if names else 2)
 
 
@@ -355,24 +363,26 @@ def name_for(side, room: int, font) -> str:
 
 
 def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag,
-          following, align="left", today_colour="green"):
+          following, align="left", today_colour="green", margin=8):
     """The next fixture: when, against whom, and where to watch."""
     big = get_font("5x7")
     label = tag or "NEXT"
     label_w = small.measure(label) + 5
 
-    if align == "right":
-        # Under the crests and pushed right: the result is the headline, the
-        # next fixture is the footnote. One line, so the broadcast joins it
-        # rather than claiming a row of its own there is no room for.
+    if align == "center":
+        # Under the crests and centred with them. One line, so the broadcast
+        # joins it rather than claiming a row of its own there is no room for.
         runs = _runs(fixture, now, show_rank, following, accent, today_colour, show_tv)
         gap = 4
-        while len(runs) > 1 and _measure_runs(runs, small, gap) > c.width - 4 - label_w:
-            runs.pop()          # drop the broadcast, then the day, to fit
-        width = _measure_runs(runs, small, gap)
-        left = max(2 + label_w, c.width - 2 - width)
-        c.text(left - label_w, y, label, dim(accent, 0.8), small)
-        _draw_runs(c, left, y, runs, small, gap)
+        room = c.width - 2 * margin - label_w
+        # Drop the broadcast, then the day, rather than letting the line run
+        # into the margins -- the gutter is the point.
+        while len(runs) > 1 and _measure_runs(runs, small, gap) > room:
+            runs.pop()
+        width = label_w + _measure_runs(runs, small, gap)
+        left = max(margin, (c.width - width) // 2)
+        c.text(left, y, label, dim(accent, 0.8), small)
+        _draw_runs(c, left + label_w, y, runs, small, gap)
         return
 
     runs = _runs(fixture, now, show_rank, following, accent, today_colour, False)
