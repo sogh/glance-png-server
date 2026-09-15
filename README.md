@@ -1,17 +1,31 @@
 # glance-png-server
 
-A private-app server for the **Glance Scroll**. It serves PNGs at a URL the
-device polls — mixing artwork you drew by hand with panels generated from live
-data (calendar, todos, holidays), and rotating between them on a single
-endpoint.
+A self-hosted private-app server for the **Glance Scroll**. It serves PNGs at a
+URL the device polls — mixing artwork you drew by hand with panels generated
+from live data — and rotates between them on a single endpoint.
 
-```
-┌────────────────────────────────────────────────────────┐
-│  9:30  │ Team standup                                  │   192 × 32
-│  AM    │ ZOOM                                          │   ~300 bytes
-│  TODAY │                                               │
-└────────────────────────────────────────────────────────┘
-```
+Every panel below is 192×32 pixels and about 300 bytes on the wire.
+
+![A gallery of panels](docs/images/gallery.png)
+
+<sup>Sky, calendar, weather, scores, vocabulary, banner, agenda, sprite. Rendered
+by `tools/screenshots.py` from invented data — the real ones are somebody's
+actual Tuesday.</sup>
+
+**Runs on your own hardware, on your own network.** No account, no cloud, no
+telemetry. The device fetches from a machine in your house. MIT licensed.
+
+## What it does
+
+- **Rotates many panels through one URL.** The device gives you ten private-app
+  slots; this turns each into a carousel, so ten slots is not ten panels.
+- **Draws from live sources** — calendars (ICS), weather (Open-Meteo), MLB,
+  NCAA, the WPBL, Home Assistant, Instagram — all keyless where the API allows.
+- **Renders your own artwork**, and hand-authored bitmap fonts with real
+  accents, so `el año` is the year and not something else.
+- **Edits in a browser** at `/edit`, without touching config or restarting.
+- **Fails visibly.** A broken source draws a card that says so, because a
+  device that caches the last good image makes a silent failure invisible.
 
 ---
 
@@ -28,6 +42,8 @@ endpoint.
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — code map and the
   reasoning behind the non-obvious decisions
 - **[docs/ROADMAP.md](docs/ROADMAP.md)** — packaging plan and open items
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — running it locally, adding a scene,
+  and what this codebase cares about
 
 This README is the tour: what the thing is, how the pieces fit, and why each
 one is the way it is. The four references above are for looking things up.
@@ -626,7 +642,7 @@ silently shifts everything below it.
 ### `pulse` — a colour ramp across the letters
 
 ```
-/s/pulse.png?items=ADA:yellow,GRACE:blue
+/s/pulse.png?items=ADA:amber,GRACE:sky
 ```
 
 Since the panel cannot fade a colour over *time*, this fades it over *space*:
@@ -636,7 +652,7 @@ visual idea, in one frame, on hardware that will never animate.
 ```yaml
 - scene: pulse
   params:
-    items: "ADA:yellow,GRACE:blue"
+    items: "ADA:amber,GRACE:sky"
     layout: column      # or row, side by side
     from: white         # the colour each name starts at
   dwell: 300
@@ -644,7 +660,7 @@ visual idea, in one frame, on hardware that will never animate.
 
 `items` is a `NAME:colour` list so the same value works from a channel config,
 the editor's params box and a query string alike. Any palette colour or
-`#rrggbb` works, in either position — `items: "ADA:white" from: yellow` runs
+`#rrggbb` works, in either position — `items: "ADA:white" from: amber` runs
 the ramp the other way.
 
 The scale is chosen to fit the panel, and an explicit `scale` that would not

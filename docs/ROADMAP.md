@@ -45,13 +45,11 @@ and a small YAML file.
 
 ### README split
 
-Partly done. The reference material now lives in `docs/CONFIG.md`,
-`docs/SCENES.md` and `docs/API.md`, which is most of the bulk. What remains:
-the README is still an operations manual with **one household's IP addresses
-and hostnames throughout** — `192.168.1.50`, `glance.example.com`, a UniFi
-gateway. A stranger needs those replaced with placeholders and the LAN/DNS
-material moved into a deployment guide. That is the last thing standing
-between this and being publishable.
+**Done.** The reference material now lives in `docs/CONFIG.md`,
+`docs/SCENES.md` and `docs/API.md`, which is most of the bulk. Addresses and hostnames are placeholders now
+(`192.168.1.50`, `glance.example.com`), the personal defaults are generic, and
+`data/overrides.json` and `data/reminders.json` are untracked with `.example`
+files shipped in their place.
 
 ---
 
@@ -63,17 +61,17 @@ reference covering every key and environment variable, and an HTTP reference
 covering every route. Every scene parameter now carries help text, which the
 editor shows and the generator picks up.
 
+Also done: a screenshot gallery (`tools/screenshots.py`, rendered from
+invented data so it leaks nobody's Tuesday and ships no third-party team
+marks), a CONTRIBUTING guide, and a `.env.example` that matches what
+`settings.yaml` actually references.
+
 Still thin:
 
-- **No screenshots anywhere.** A panel server whose docs contain no pictures
-  of panels is a strange artefact. The preview page renders them all already;
-  the missing piece is committing a few PNGs and referencing them.
-- **No CONTRIBUTING or scene-authoring walkthrough.** "Adding a scene" in the
-  README is a code sketch, not a guide.
-- **Personal data in the tracked tree.** `data/reminders.json` and
-  `data/overrides.json` are versioned but excluded from deploys, so the repo
-  copy is both stale and the wrong shape for a stranger. They want
-  gitignoring, with an `.example` shipped instead — as `.env` already does.
+- **No per-scene screenshots in SCENES.md.** The generator writes one file per
+  panel; wiring them into the generated reference is a small step.
+- **No walkthrough of a real first run** end to end, with a photograph of the
+  hardware showing it.
 
 ## Open items, unrelated to packaging
 

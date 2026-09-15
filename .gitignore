@@ -9,3 +9,8 @@ data/state.json
 logs/*.log
 logs/*.err
 preview-frames/
+
+# Runtime state. Excluded from deploys too, so the copy in git was always
+# both stale and the wrong shape for anyone else -- see data/*.example.json.
+data/overrides.json
+data/reminders.json

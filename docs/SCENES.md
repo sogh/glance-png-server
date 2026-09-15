@@ -258,7 +258,7 @@ Names in a colour, over time or across the letters
 
 | Param | Type | Default | Means |
 |---|---|---|---|
-| `items` | text | `ADA:yellow,GRACE:blue` | NAME:colour, comma separated. |
+| `items` | text | `ADA:amber,GRACE:sky` | NAME:colour, comma separated. |
 | `mode` | select | `gradient` | gradient ramps across the letters; pulse animates (this panel does not decode APNG). One of: `gradient`, `pulse`. |
 | `layout` | select | `column` | Stack the names, or set them side by side. One of: `column`, `row`. |
 | `from` | color | `white` | Colour each name starts at. One of: any palette colour or `#rrggbb`. |

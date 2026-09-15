@@ -1,0 +1,5 @@
+{
+  "_comment": "Written by /edit. Layered over config/settings.yaml; a channel here REPLACES that channel wholesale. Delete a key to revert it to the file. Copy this to overrides.json only if you want a starting point -- an absent file is the normal state.",
+  "channels": {},
+  "carousel": {}
+}

@@ -294,8 +294,8 @@ channels:
       takeover: true
       when: { mode: visitors }
       params:
-        title: MAPLE FARM
-        subtitle: WELCOME
+        title: WELCOME
+        subtitle: COME ON IN
         accent: mint
     - scene: today-agenda
       params:
@@ -316,7 +316,7 @@ channels:
       when: { mode: visitors }
       params:
         title: GLAD YOU CAME
-        subtitle: "@YOUR_ACCOUNT"
+        subtitle: MAKE YOURSELF AT HOME
         accent: amber
     - scene: agenda
       params:

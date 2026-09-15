@@ -74,7 +74,7 @@ PREVIEW_DEMO: dict[str, str] = {
     "text": "text=GOOD+MORNING&sub=IT+IS+A+FINE+DAY&color=amber",
     "countdown": "date=2026-12-25&label=XMAS",
     "sprite": "before=It%27s&after=season%21",
-    "pulse": "items=ADA:yellow,GRACE:blue",
+    "pulse": "items=ADA:amber,GRACE:sky",
 }
 
 def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) -> Response:

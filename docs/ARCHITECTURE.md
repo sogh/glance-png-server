@@ -86,7 +86,7 @@ and it would be baffling if that also silently disarmed the mode.
 grey mush — every glyph edge becomes a half-lit LED. The glyphs are editable
 pixel art in `fonts.py`: `#` lit, `.` dark, rows separated by `/`. Three
 missing-glyph bugs reached the panel during development (`%` drew as `13?`,
-`@` as `?handle`, `&` as `Health ? Wealth`) because a missing glyph
+`@` as `?handle`, `&` as `Bed ? Breakfast`) because a missing glyph
 falls back silently. There is now a test asserting both fonts cover the
 characters the scenes actually draw.
 

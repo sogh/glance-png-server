@@ -39,33 +39,33 @@ def test_age_is_reported_in_useful_units():
 
 def test_own_account_payload():
     p = InstagramSource._parse(
-        {"username": "your_account", "name": "Maple Farm",
+        {"username": "sample_account", "name": "Sample Account",
          "followers_count": 1284, "media_count": 317, "follows_count": 190}, "")
     assert (p.followers, p.posts, p.follows) == (1284, 317, 190)
-    assert p.username == "your_account"
+    assert p.username == "sample_account"
 
 
 def test_business_discovery_payload():
     """A different shape entirely -- the counts arrive nested."""
     p = InstagramSource._parse(
-        {"business_discovery": {"username": "your_account",
+        {"business_discovery": {"username": "sample_account",
                                 "followers_count": 1284, "media_count": 317}},
-        "your_account")
+        "sample_account")
     assert (p.followers, p.posts) == (1284, 317)
     assert p.follows is None
 
 
 def test_without_a_token_it_says_so(tmp_path: Path):
-    src = InstagramSource("", "your_account", cache_dir=tmp_path)
+    src = InstagramSource("", "sample_account", cache_dir=tmp_path)
     assert not src.configured
     assert src.profile() is None
     assert "token" in src.last_error
 
 
 def test_a_fresh_cache_is_used_without_calling_out(tmp_path: Path):
-    src = InstagramSource("tok", "your_account", cache_dir=tmp_path, refresh=9999)
+    src = InstagramSource("tok", "sample_account", cache_dir=tmp_path, refresh=9999)
     src.cache_file.write_text(json.dumps(
-        Profile("your_account", 1284, 317, fetched_at=time.time()).__dict__))
+        Profile("sample_account", 1284, 317, fetched_at=time.time()).__dict__))
     p = src.profile()
     assert p.followers == 1284
     assert src.last_error is None, "should not have attempted a request"
@@ -73,10 +73,10 @@ def test_a_fresh_cache_is_used_without_calling_out(tmp_path: Path):
 
 def test_a_failed_fetch_serves_the_last_known_numbers(tmp_path: Path):
     """Stale and labelled beats absent, and beats wrong."""
-    src = InstagramSource("bad-token", "your_account", cache_dir=tmp_path, refresh=0)
+    src = InstagramSource("bad-token", "sample_account", cache_dir=tmp_path, refresh=0)
     old = time.time() - 6 * 3600
     src.cache_file.write_text(json.dumps(
-        Profile("your_account", 1284, 317, fetched_at=old).__dict__))
+        Profile("sample_account", 1284, 317, fetched_at=old).__dict__))
     src.timeout = 0.001
     p = src.profile()
     assert p is not None and p.followers == 1284
@@ -86,7 +86,7 @@ def test_a_failed_fetch_serves_the_last_known_numbers(tmp_path: Path):
 
 def test_no_cache_and_no_network_yields_nothing_rather_than_zero(tmp_path: Path):
     """Zero followers is a number. Showing it would be a lie."""
-    src = InstagramSource("bad-token", "your_account", cache_dir=tmp_path, refresh=0)
+    src = InstagramSource("bad-token", "sample_account", cache_dir=tmp_path, refresh=0)
     src.timeout = 0.001
     assert src.profile() is None
 
@@ -110,7 +110,7 @@ def render(app, source, params=None):
 
 
 def test_it_draws_both_counts(app):
-    c = render(app, Fake(Profile("your_account", 1284, 317, fetched_at=time.time())))
+    c = render(app, Fake(Profile("sample_account", 1284, 317, fetched_at=time.time())))
     assert c.image.size == (192, 32)
     assert sum(1 for p in c.image.get_flattened_data() if sum(p) > 0) > 200
 

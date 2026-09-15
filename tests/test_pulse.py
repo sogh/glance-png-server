@@ -20,7 +20,7 @@ def render(app, params, width=192):
 
 
 def test_item_parsing():
-    assert parse_items("ADA:yellow,GRACE:blue") == [("ADA", "yellow"), ("GRACE", "blue")]
+    assert parse_items("ADA:amber,GRACE:sky") == [("ADA", "amber"), ("GRACE", "sky")]
     assert parse_items("SOLO") == [("SOLO", "white")]
     assert parse_items(" A:red , B:blue ") == [("A", "red"), ("B", "blue")]
     assert parse_items("") == []
@@ -31,7 +31,7 @@ def test_it_is_a_single_still(app):
 
 
 def test_the_gradient_ramps_across_the_letters(app):
-    c = render(app, {"items": "ADA:yellow"})
+    c = render(app, {"items": "ADA:amber"})
     px = [(x, c.image.getpixel((x, y)))
           for x in range(c.width) for y in range(32)
           if sum(c.image.getpixel((x, y))) > 0]
@@ -45,7 +45,7 @@ def test_the_gradient_ramps_across_the_letters(app):
 
 
 def test_each_item_ramps_to_its_own_colour(app):
-    px = render(app, {"items": "ADA:yellow,GRACE:blue"}).image.get_flattened_data()
+    px = render(app, {"items": "ADA:amber,GRACE:sky"}).image.get_flattened_data()
     assert [p for p in px if p[0] > 150 and p[1] > 150 and p[2] < 90], "no yellow end"
     assert [p for p in px if p[2] > 150 and p[0] < 110], "no blue end"
 
@@ -61,20 +61,20 @@ def test_the_start_colour_is_configurable(app):
 
 @pytest.mark.parametrize("layout", ["row", "column"])
 def test_nothing_is_clipped_at_the_chosen_scale(app, layout):
-    c = render(app, {"items": "ADA:yellow,GRACE:blue", "layout": layout})
+    c = render(app, {"items": "ADA:amber,GRACE:sky", "layout": layout})
     edge = [c.image.getpixel((c.width - 1, y)) for y in range(32)]
     assert all(sum(p) == 0 for p in edge), "text ran into the last column"
 
 
 def test_an_oversized_explicit_scale_is_clamped_not_clipped(app):
     """Setting scale: 6 in the editor should shrink to fit, not truncate."""
-    big = render(app, {"items": "ADA:yellow,GRACE:blue", "scale": 6})
-    auto = render(app, {"items": "ADA:yellow,GRACE:blue"})
+    big = render(app, {"items": "ADA:amber,GRACE:sky", "scale": 6})
+    auto = render(app, {"items": "ADA:amber,GRACE:sky"})
     assert big.to_ascii() == auto.to_ascii()
 
 
 def test_a_narrow_panel_still_fits(app):
-    c = render(app, {"items": "ADA:yellow,GRACE:blue"}, width=64)
+    c = render(app, {"items": "ADA:amber,GRACE:sky"}, width=64)
     assert c.width == 64
     assert all(sum(c.image.getpixel((63, y))) == 0 for y in range(32))
 

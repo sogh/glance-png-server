@@ -1,0 +1,6 @@
+[
+  {"text": "Renew the passport", "due": "2026-09-11", "priority": 1},
+  {"text": "Book the dentist", "due": "2026-09-20", "priority": 2},
+  {"text": "Water the ferns", "priority": 3, "tag": "home"},
+  {"text": "Already done", "done": true}
+]

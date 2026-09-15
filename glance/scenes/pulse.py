@@ -3,7 +3,7 @@
 Written as an animated PNG. If the panel does not decode APNG it shows frame
 zero, which is the all-white state -- still perfectly readable.
 
-    /s/pulse.png?items=ADA:yellow,GRACE:blue
+    /s/pulse.png?items=ADA:amber,GRACE:sky
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from ..fonts import get_font
 from ..palette import mix
 from .base import Param, RenderContext, register
 
-DEFAULT_ITEMS = "ADA:yellow,GRACE:blue"
+DEFAULT_ITEMS = "ADA:amber,GRACE:sky"
 
 
 def parse_items(raw: str) -> list[tuple[str, str]]:

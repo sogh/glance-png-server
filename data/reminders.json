@@ -1,7 +1,0 @@
-[
-  { "text": "Renew passport", "due": "2026-09-11", "priority": 1 },
-  { "text": "Book dentist", "due": "2026-09-20", "priority": 2 },
-  { "text": "Water the ferns", "priority": 3, "tag": "home" },
-  { "text": "File Q3 expenses", "due": "2026-09-30", "priority": 2 },
-  { "text": "Ship the thing", "done": true }
-]
