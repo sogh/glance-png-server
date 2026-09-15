@@ -43,6 +43,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
               Param("forecast", "number", 3, minimum=0, maximum=3,
                     help="Days of forecast on the right; 0 for none"),
               Param("feels", "bool", False, help="Show 'feels like' when it differs"),
+              Param("margin", "number", 8, minimum=0, maximum=40,
+                    help="Blank kept at each edge, so the pane separates from "
+                         "its neighbours as the device pans past"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -62,13 +65,23 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     big = get_font("5x7")
     icon_size = min(22, c.height - 4)
 
+    # Everything hangs off these two, rather than off the panel edges: the
+    # device pans straight from one app into the next, and a pane inked end
+    # to end has nothing to say where it stops and its neighbour starts.
+    margin = max(0, int(params.get("margin", 8) or 0))
+    left, right = margin, c.width - margin
+
     # Icon, then the temperature, then the detail column.
-    draw_icon(c, current.condition, 2, (c.height - icon_size) // 2,
+    draw_icon(c, current.condition, left, (c.height - icon_size) // 2,
               icon_size, night=not current.is_day)
 
     temp = f"{current.temperature:.0f}°"
-    scale = 2 if big.measure(temp) * 2 <= 46 else 1
-    temp_x = icon_size + 7
+    temp_x = left + icon_size + 5
+    # The budget comes from what is actually left, not from a constant. It
+    # used to be a flat 46, which quietly encoded the old edge-to-edge
+    # geometry -- give the pane margins and a 64px panel pushed the
+    # temperature off its own right-hand side.
+    scale = 2 if big.measure(temp) * 2 <= min(46, right - temp_x) else 1
     c.text(temp_x, (c.height - big.height * scale) // 2, temp,
            _temp_color(current.temperature, params.get("color", "white")),
            big, "left", None, scale)
@@ -77,12 +90,19 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     # text then gets whatever is left, and drops lines that no longer fit.
     days = int(params.get("forecast", 3))
     shown = current.forecast[:max(0, days)]
+    # Drop columns that will not fit rather than draw them anyway. Three
+    # columns is 63px, so on a single 64px module the block was being placed
+    # at a negative x and bleeding back across the icon -- visible only once
+    # the pane gained margins and the number went properly negative.
+    temp_end = temp_x + big.measure(temp) * scale
+    while shown and right - len(shown) * FORECAST_COLUMN < temp_end + 6:
+        shown = shown[:-1]
     forecast_w = len(shown) * FORECAST_COLUMN
     if shown:
-        _draw_forecast(c, shown, c.width - forecast_w, small, params)
+        _draw_forecast(c, shown, right - forecast_w, small, params)
 
     detail_x = temp_x + big.measure(temp) * scale + 7
-    room = c.width - detail_x - 2 - (forecast_w + 4 if shown else 0)
+    room = right - detail_x - (forecast_w + 4 if shown else 0)
     if room < 20:
         return c
 

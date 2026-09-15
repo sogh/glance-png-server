@@ -322,3 +322,29 @@ def test_a_small_sun_keeps_its_rays():
     # Corners of the box can only be lit by rays, never by the disc.
     corners = [c.image.getpixel((x, y)) for x in (2, 14) for y in (2, 14)]
     assert any(sum(p) > 0 for p in corners), "no rays at 12px"
+
+
+def test_the_pane_clears_both_edges(app):
+    """The device pans one app straight into the next, so a pane inked end to
+    end has nothing to say where it stops and its neighbour starts."""
+    margin = 8
+    ctx = app.context(brightness=1.0)
+    ctx.weather = FakeSource(Weather(64, 62, 65, 52, "clear", True))
+    c = REGISTRY["weather"].render(ctx, {"margin": margin})
+    lit = [x for x in range(c.width) for y in range(32)
+           if c.image.getpixel((x, y)) != (0, 0, 0)]
+    assert min(lit) >= margin
+    assert max(lit) <= c.width - margin
+
+
+@pytest.mark.parametrize("width", [64, 96, 128, 192])
+def test_a_forecast_column_that_will_not_fit_is_dropped(app, width):
+    """Three columns is 63px. On a single 64px module the block was being
+    placed at a negative x and bleeding back across the icon."""
+    ctx = app.context(width=width, brightness=1.0)
+    ctx.weather = FakeSource(Weather(64, 62, 65, 52, "clear", True))
+    c = REGISTRY["weather"].render(ctx, {"margin": 8})
+    lit = [x for x in range(c.width) for y in range(32)
+           if c.image.getpixel((x, y)) != (0, 0, 0)]
+    assert min(lit) >= 8, f"width {width}: ink at x={min(lit)}"
+    assert max(lit) <= c.width - 8

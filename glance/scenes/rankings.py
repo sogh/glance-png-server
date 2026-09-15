@@ -45,6 +45,9 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="Team crests, or rank and abbreviation as text"),
               Param("accent", "color", "amber", options="@colors"),
               Param("label", "bool", True, help="Name the poll"),
+              Param("margin", "number", 8, minimum=0, maximum=40,
+                    help="Blank kept at each edge, so the pane separates from "
+                         "its neighbours as the device pans past"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_rankings(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
@@ -68,9 +71,10 @@ def render_rankings(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         return c
 
     tag = getattr(source, "poll_name", "") if bool(params.get("label", True)) else ""
+    margin = max(0, int(params.get("margin", 8) or 0))
     if str(params.get("style", "crests")) == "text":
-        return _as_text(c, entries, asked, tag, accent, small)
-    return _as_crests(ctx, c, entries, asked, tag, accent, small)
+        return _as_text(c, entries, asked, tag, accent, small, margin)
+    return _as_crests(ctx, c, entries, asked, tag, accent, small, margin)
 
 
 def _rows(c: Canvas, height: int) -> list[int]:
@@ -81,70 +85,113 @@ def _rows(c: Canvas, height: int) -> list[int]:
     return [i * (height + gap) + gap // 2 for i in range(count)]
 
 
-def _as_crests(ctx, c, entries, asked, tag, accent, small):
+def _pack(cells: list[int], room: int, rows: int, gap: int) -> list[list[int]]:
+    """Greedily fill each row, left to right, within `room`.
+
+    Two passes rather than one: the width of a row is not known until it is
+    full, and a row cannot be centred until its width is known. Packing and
+    drawing in the same loop is what pinned everything to the left edge.
+    """
+    out: list[list[int]] = []
+    current: list[int] = []
+    used = 0
+    for index, width in enumerate(cells):
+        need = width + (gap if current else 0)
+        if current and used + need > room:
+            out.append(current)
+            if len(out) >= rows:
+                return out
+            current, used = [], 0
+            need = width
+        current.append(index)
+        used += need
+    if current:
+        out.append(current)
+    return out[:rows]
+
+
+def _centred(c: Canvas, widths: list[int], indexes: list[int], gap: int,
+             margin: int) -> int:
+    """Left edge for a row, so its content sits in the middle of the strip."""
+    span = sum(widths[i] for i in indexes) + gap * (len(indexes) - 1)
+    return max(margin, (c.width - span) // 2)
+
+
+def _lay_out(c, cells, rows, gap, margin, asked):
+    """Pack cells into rows and yield (x, top, cell) for each, centred.
+
+    Two passes: a row's width is not known until it is full, and it cannot be
+    centred until its width is known. Packing and drawing in one loop is what
+    pinned everything to the left edge.
+    """
+    widths = [cell[0] for cell in cells]
+    packed = _pack(widths, c.width - 2 * margin, len(rows), gap)
+    drawn = 0
+    for row_index, indexes in enumerate(packed):
+        x = _centred(c, widths, indexes, gap, margin)
+        for i in indexes:
+            kind = cells[i][1]
+            if kind == "team":
+                if asked and drawn >= asked:
+                    return
+                drawn += 1
+            yield x, rows[row_index], cells[i]
+            x += widths[i] + gap
+
+
+def _as_crests(ctx, c, entries, asked, tag, accent, small, margin=8):
     store = getattr(ctx, "logos", None)
     size = getattr(store, "size", 16) if store is not None else 16
-    rows = _rows(c, size)
 
-    # Rank number then crest. A team whose logo will not read at this size
-    # falls back to its abbreviation in the same slot -- in a list of many,
-    # one text cell reads as a team without a usable crest, where in a
-    # head-to-head it would look like a rendering fault.
-    x, row = 2, 0
+    # A team whose logo will not read at this size falls back to its
+    # abbreviation in the same slot -- in a list of many, one text cell reads
+    # as a team without a usable crest, where in a head-to-head it would look
+    # like a rendering fault.
+    crests = [store.get(e.key or e.abbrev, e.logo, size)
+              if (store and e.logo) else None for e in entries]
+
+    cells = []
     if tag:
-        c.text(x, rows[0] + (size - small.height) // 2, tag, dim(accent, 0.8), small)
-        x += small.measure(tag) + 5
+        cells.append((small.measure(tag), "tag", tag))
+    for index, entry in enumerate(entries):
+        rank = str(entry.rank or "")
+        body = size if crests[index] is not None else small.measure(entry.abbrev)
+        cells.append((small.measure(rank) + 2 + body, "team", index))
 
-    shown = 0
-    for side in entries:
-        crest = store.get(side.key or side.abbrev, side.logo) if (store and side.logo) else None
-        label = str(side.rank or "")
-        body = size if crest is not None else small.measure(side.abbrev)
-        need = small.measure(label) + 2 + body + 6
-        if x + need > c.width:
-            row += 1
-            if row >= len(rows):
-                break
-            x = 2
-            need = small.measure(label) + 2 + body + 6
-            if x + need > c.width:
-                break
-        top = rows[row]
-        c.text(x, top + (size - small.height) // 2, label, dim(accent, 0.85), small)
-        x += small.measure(label) + 2
-        if crest is not None:
-            c.blit(crest, x, top)
+    middle = lambda top: top + (size - small.height) // 2
+    for x, top, (_, kind, payload) in _lay_out(c, cells, _rows(c, size), 6,
+                                               margin, asked):
+        if kind == "tag":
+            c.text(x, middle(top), payload, dim(accent, 0.8), small)
+            continue
+        entry = entries[payload]
+        rank = str(entry.rank or "")
+        c.text(x, middle(top), rank, dim(accent, 0.85), small)
+        x += small.measure(rank) + 2
+        if crests[payload] is not None:
+            c.blit(crests[payload], x, top)
         else:
-            c.text(x, top + (size - small.height) // 2, side.abbrev, "white", small)
-        x += body + 6
-        shown += 1
-        if asked and shown >= asked:
-            break
+            c.text(x, middle(top), entry.abbrev, "white", small)
     return c
 
 
-def _as_text(c, entries, asked, tag, accent, small):
-    rows = _rows(c, small.height + 2)
-    x, row = 2, 0
+def _as_text(c, entries, asked, tag, accent, small, margin=8):
+    cells = []
     if tag:
-        c.text(x, rows[0], tag, dim(accent, 0.8), small)
-        x += small.measure(tag) + 5
+        cells.append((small.measure(tag), "tag", tag))
+    for index, entry in enumerate(entries):
+        rank = str(entry.rank or "")
+        cells.append((small.measure(rank) + 2 + small.measure(entry.abbrev),
+                      "team", index))
 
-    shown = 0
-    for side in entries:
-        label, name = str(side.rank or ""), side.abbrev
-        need = small.measure(label) + 2 + small.measure(name) + 6
-        if x + need > c.width:
-            row += 1
-            if row >= len(rows):
-                break
-            x = 2
-        top = rows[row]
-        c.text(x, top, label, dim(accent, 0.85), small)
-        x += small.measure(label) + 2
-        c.text(x, top, name, "white", small)
-        x += small.measure(name) + 6
-        shown += 1
-        if asked and shown >= asked:
-            break
+    for x, top, (_, kind, payload) in _lay_out(c, cells,
+                                               _rows(c, small.height + 2), 6,
+                                               margin, asked):
+        if kind == "tag":
+            c.text(x, top, payload, dim(accent, 0.8), small)
+            continue
+        entry = entries[payload]
+        rank = str(entry.rank or "")
+        c.text(x, top, rank, dim(accent, 0.85), small)
+        c.text(x + small.measure(rank) + 2, top, entry.abbrev, "white", small)
     return c

@@ -1034,6 +1034,11 @@ is on top.
   params: { board: ncaa, count: 0, style: crests }
 ```
 
+Rows are packed first and then centred — a row's width is not known until it
+is full, and packing and drawing in one loop is what pins everything to the
+left edge. `margin` (default 8px) keeps the pane clear of both edges, same as
+`scores` and `weather`.
+
 `count: 0` fits as many as the strip takes — about 12 as crests, all 25 as
 text (`style: text`). It reads the **published poll**, not any team's
 schedule, so showing twenty-five teams costs one cached request rather than

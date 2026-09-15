@@ -888,3 +888,30 @@ def test_the_broadcast_is_dropped_before_the_line_overflows(app):
           align="right")
     edge = [c.image.getpixel((c.width - 1, y)) for y in range(20, 32)]
     assert all(sum(p) == 0 for p in edge), "ran off the right edge"
+
+
+def test_the_rankings_rows_clear_both_edges(app, polled, tmp_path):
+    """Same reason as the scoreline: the device pans one app straight into
+    the next, so a pane inked end to end runs into its neighbour."""
+    margin = 8
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX", "espn-UGA"]))
+    for style in ("crests", "text"):
+        c = REGISTRY["rankings"].render(
+            ctx, {"board": "ncaa", "style": style, "margin": margin})
+        for row in bands(c):
+            lit = [x for x in range(c.width) for y in range(row[0], row[1] + 1)
+                   if c.image.getpixel((x, y)) != (0, 0, 0)]
+            assert min(lit) >= margin, f"{style} row {row} hits the left margin"
+            assert max(lit) <= c.width - margin, f"{style} row {row} hits the right"
+
+
+def test_a_short_rankings_row_is_centred_not_left_aligned(app, polled, tmp_path):
+    """A row's width is not known until it is full, so packing and drawing in
+    one loop pinned everything to the left edge."""
+    ctx = rankings_ctx(app, polled, crest_store(tmp_path, ["espn-TEX", "espn-UGA"]))
+    c = REGISTRY["rankings"].render(
+        ctx, {"board": "ncaa", "style": "text", "count": 2, "label": False})
+    lit = [x for x in range(c.width) for y in range(c.height)
+           if c.image.getpixel((x, y)) != (0, 0, 0)]
+    left, right = min(lit), c.width - 1 - max(lit)
+    assert abs(left - right) <= 3, f"gutters {left} vs {right}"
