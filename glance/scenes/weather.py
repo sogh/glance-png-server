@@ -128,7 +128,11 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     limit = detail_x + room
     x = detail_x
     for index, (text, color) in enumerate(segments):
-        gap = 0 if index and segments[index - 1][0] == "AQI" else 4
+        # "AQI" and its number belong together -- the number carries the band
+        # colour and the word alone means nothing -- so they get a hair of
+        # space rather than the full gap between separate readings.
+        joined = bool(index) and segments[index - 1][0] == "AQI"
+        gap = 2 if joined else 4
         width = small.measure(text)
         if x + gap + width > limit:
             break
