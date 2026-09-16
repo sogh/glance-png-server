@@ -36,12 +36,12 @@ Three environment variables move things about, and the image sets all three:
 | `GLANCE_DATA_DIR` | caches, rotation state, the overlay |
 | `GLANCE_STATIC_DIR` | artwork |
 
-> **Not yet built anywhere.** The `Dockerfile` and `docker-compose.yml` here
-> have not been run through `docker build` — there is no Docker on the machine
-> they were written on. The layout they describe **is** tested: the server was
-> started against a `/config` + `/data` split exactly as the image arranges it,
-> and served every route. Treat the image as untried and the arrangement as
-> known-good, and please open an issue if the build needs a nudge.
+Artwork is mounted from `assets/static`, the same place it lives when you run
+without Docker, so the two do not quietly keep separate copies.
+
+Built and run on `linux/arm64` (Docker 29.8 via Colima): the image comes out at
+**289 MB**, starts healthy, seeds an empty `config/` on first run, writes its
+caches to `data/`, and serves every route including `/preview` and `/edit`.
 
 ## Any machine with Python
 

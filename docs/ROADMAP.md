@@ -75,11 +75,9 @@ Still thin:
 
 ## Known gaps
 
-- **The Docker image has never been built.** The `Dockerfile` and compose file
-  were written on a machine with no Docker. The *layout* they describe is
-  tested — the server was run against the same `/config` + `/data` split and
-  served every route — but the build itself is unverified. First thing to
-  confirm.
+- **The Docker image has only been built for arm64.** It builds, runs healthy
+  and serves everything on Apple silicon via Colima; `linux/amd64` is the
+  obvious next check, and a multi-arch `buildx` push would settle it.
 - **Instagram is untested against the live API.** The code handles both
   response shapes and every failure path, but it has never made a real call —
   that needs a Meta app and token.

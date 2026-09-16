@@ -9,8 +9,12 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config:/config     # settings.yaml, holidays, vocabulary, your art
-      - ./data:/data         # caches and rotation state; safe to delete
+      - ./config:/config              # settings.yaml, holidays, vocabulary
+      - ./data:/data                  # caches and rotation state; safe to delete
+      # Artwork lives in the same place whether you run this in Docker or not.
+      # Without this line the container would keep its own copy under
+      # config/static and the two would quietly diverge.
+      - ./assets/static:/config/static
     environment:
       # Everything optional. See .env.example for the full list.
       - TZ=UTC
