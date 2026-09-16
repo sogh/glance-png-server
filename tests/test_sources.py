@@ -154,11 +154,32 @@ def test_utc_timestamps_convert_to_local(ics_server, tmp_path: Path, now):
     assert (review.start.hour, review.start.minute) == (10, 0)   # 17:00Z in PDT
 
 
-def test_all_day_events_are_flagged_and_span_the_day(ics_server, tmp_path: Path, now):
+def test_all_day_events_span_exactly_their_day(ics_server, tmp_path: Path, now):
+    """DTEND is EXCLUSIVE for a DATE value. The fixture is DTSTART 20260910 /
+    DTEND 20260911 -- one day, the 10th. Anchoring that end to 23:59 on the
+    11th gave every all-day entry an extra day of life."""
+    from datetime import date
     src = CalendarSource(ics_server, tmp_path, tz=TZ, refresh=0)
     bday = next(e for e in src.upcoming(now) if e.summary == "Anna birthday")
     assert bday.all_day
-    assert bday.start.hour == 0 and bday.end.hour == 23
+    assert bday.start.date() == date(2026, 9, 10)
+    assert (bday.start.hour, bday.start.minute) == (0, 0)
+    assert bday.end.date() == date(2026, 9, 11)
+    assert (bday.end.hour, bday.end.minute) == (0, 0)
+
+
+def test_an_all_day_event_is_over_once_its_day_is(ics_server, tmp_path: Path):
+    """It used to stay green as "happening now" right through the following
+    day, which kept yesterday's column alive on the calendar panel."""
+    from datetime import datetime
+    src = CalendarSource(ics_server, tmp_path, tz=TZ, refresh=0)
+    during = datetime(2026, 9, 10, 22, 0, tzinfo=TZ)
+    after = datetime(2026, 9, 11, 0, 30, tzinfo=TZ)
+    bday = next(e for e in src.events(during) if e.summary == "Anna birthday")
+    assert bday.is_now(during)
+    assert not bday.is_now(after)
+    # And it drops out of "still relevant" rather than lingering.
+    assert not [e for e in src.upcoming(after) if e.summary == "Anna birthday"]
 
 
 def test_events_are_returned_in_chronological_order(ics_server, tmp_path: Path, now):
@@ -202,3 +223,33 @@ def test_a_non_calendar_response_is_rejected(tmp_path: Path, now, ics_server):
     src = CalendarSource(bad, tmp_path, tz=TZ, refresh=0)
     assert src.events(now) == []
     assert src.last_error
+
+
+def test_a_multi_day_all_day_event_keeps_every_day_it_has(tmp_path: Path):
+    """The exclusive-end fix must not shorten a genuine multi-day event."""
+    from datetime import datetime
+    ics = ("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\n"
+           "UID:trip@test\nDTSTART;VALUE=DATE:20260910\n"
+           "DTEND;VALUE=DATE:20260913\nSUMMARY:Away\nEND:VEVENT\nEND:VCALENDAR\n")
+    src = CalendarSource("http://unused.invalid/x.ics", tmp_path, tz=TZ, refresh=9999)
+    src.cache_file.write_text(ics)
+    when = datetime(2026, 9, 11, 12, 0, tzinfo=TZ)
+    trip = next(e for e in src.events(when) if e.summary == "Away")
+    assert trip.is_now(when)                                   # the middle day
+    assert trip.is_now(datetime(2026, 9, 12, 23, 0, tzinfo=TZ))  # the last day
+    assert not trip.is_now(datetime(2026, 9, 13, 0, 30, tzinfo=TZ))
+
+
+def test_an_exporter_that_writes_dtend_equal_to_dtstart_still_gets_a_day(tmp_path: Path):
+    """Not legal iCalendar, but it happens -- and a zero-length event would be
+    invisible rather than wrong, which is harder to notice."""
+    from datetime import datetime
+    ics = ("BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//t//EN\nBEGIN:VEVENT\n"
+           "UID:odd@test\nDTSTART;VALUE=DATE:20260910\n"
+           "DTEND;VALUE=DATE:20260910\nSUMMARY:Odd\nEND:VEVENT\nEND:VCALENDAR\n")
+    src = CalendarSource("http://unused.invalid/y.ics", tmp_path, tz=TZ, refresh=9999)
+    src.cache_file.write_text(ics)
+    when = datetime(2026, 9, 10, 12, 0, tzinfo=TZ)
+    odd = next(e for e in src.events(when) if e.summary == "Odd")
+    assert odd.is_now(when)
+    assert not odd.is_now(datetime(2026, 9, 11, 0, 30, tzinfo=TZ))

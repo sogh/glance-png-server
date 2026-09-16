@@ -140,7 +140,18 @@ class CalendarSource:
             start, all_day = self._to_local(raw_start.dt)
             raw_end = occ.get("DTEND")
             if raw_end is not None:
-                end, _ = self._to_local(raw_end.dt, end_of_day=all_day)
+                # For a DATE value, DTEND is EXCLUSIVE: a one-day all-day
+                # event on the 19th is published as DTEND 20241120, meaning
+                # "up to the start of the 20th". Anchoring that to the END of
+                # the 20th gave every all-day entry an extra day of life -- it
+                # stayed green as "happening now" through the following day,
+                # and kept yesterday's column alive on the calendar panel.
+                end, _ = self._to_local(raw_end.dt)
+                if all_day and end <= start:
+                    # Some exporters write DTEND equal to DTSTART for a single
+                    # day, which is not legal and would otherwise make the
+                    # event zero-length and invisible.
+                    end = start + timedelta(days=1)
             else:
                 end = start + timedelta(days=1) if all_day else start + timedelta(hours=1)
             raw = str(occ.get("SUMMARY", "(no title)")).strip()
