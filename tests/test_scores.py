@@ -915,3 +915,78 @@ def test_a_short_rankings_row_is_centred_not_left_aligned(app, polled, tmp_path)
            if c.image.getpixel((x, y)) != (0, 0, 0)]
     left, right = min(lit), c.width - 1 - max(lit)
     assert abs(left - right) <= 3, f"gutters {left} vs {right}"
+
+
+# --- a game in progress -----------------------------------------------------
+
+def live_fixture():
+    f = fixture("SEA", "LAA", 3, 2, LIVE, hours=-1)
+    f.detail, f.broadcast, f.following = "BOT 5TH", "MARINERS.TV", "SEA"
+    for side in (f.away, f.home):
+        side.logo, side.key = ("http://x/logo.png",), f"espn-{side.abbrev}"
+    return f
+
+
+def live_ctx(app, tmp_path, with_crests=True):
+    keys = ["espn-SEA", "espn-LAA"] if with_crests else []
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, keys)
+    ctx.scoreboards = {"mlb": Board(name="mlb", source=FakeBoard([live_fixture()]),
+                                    label="MARINERS")}
+    return ctx
+
+
+class FakeBoard:
+    name, last_error, configured = "mlb", None, True
+    teams = ["SEA"]
+
+    def __init__(self, fixtures): self._f = fixtures
+
+    def fixtures(self, now): return self._f
+
+
+def test_a_live_game_gets_the_same_card_as_a_finished_one(app, tmp_path):
+    """It used to be a separate layout -- a wide line of plain text with no
+    crest and no name on it -- so the one panel you actually stand and watch
+    was the one that looked least like the others."""
+    c = REGISTRY["scores"].render(live_ctx(app, tmp_path), {"board": "mlb"})
+    rows = bands(c)
+    assert len(rows) == 3, rows          # crests+scores, names, the clock
+    assert rows[0][0] == 0
+
+
+def test_the_half_inning_is_drawn_in_green(app, tmp_path):
+    from glance.palette import parse
+    c = REGISTRY["scores"].render(live_ctx(app, tmp_path), {"board": "mlb"})
+    assert parse("green") in {p for p in c.image.get_flattened_data() if p != (0, 0, 0)}
+
+
+def test_a_live_game_clears_both_margins(app, tmp_path):
+    for crests in (True, False):
+        c = REGISTRY["scores"].render(live_ctx(app, tmp_path, crests),
+                                      {"board": "mlb", "margin": 8})
+        for row in bands(c):
+            lit = [x for x in range(c.width) for y in range(row[0], row[1] + 1)
+                   if c.image.getpixel((x, y)) != (0, 0, 0)]
+            assert min(lit) >= 8, (crests, row)
+            assert max(lit) <= c.width - 8, (crests, row)
+
+
+def test_without_a_usable_crest_a_live_game_still_reads(app, tmp_path):
+    """The wide scoreline is the fallback, not the default."""
+    c = REGISTRY["scores"].render(live_ctx(app, tmp_path, with_crests=False),
+                                  {"board": "mlb"})
+    assert c.image.get_flattened_data().count((0, 0, 0)) < 192 * 32
+
+
+def test_a_live_game_wins_over_a_finished_one(app, tmp_path):
+    """Priority is live, then next, then last -- a panel showing Saturday's
+    win while Sunday's game is in the sixth is the thing to avoid."""
+    done = fixture("SEA", "OAK", 1, 2, FINAL, hours=-30)
+    both = FakeBoard([done, live_fixture()])
+    ctx = app.context(NOW, brightness=1.0)
+    ctx.logos = crest_store(tmp_path, ["espn-SEA", "espn-LAA"])
+    ctx.scoreboards = {"mlb": Board(name="mlb", source=both, label="MARINERS")}
+    from glance.palette import parse
+    c = REGISTRY["scores"].render(ctx, {"board": "mlb"})
+    assert parse("green") in {p for p in c.image.get_flattened_data() if p != (0, 0, 0)}

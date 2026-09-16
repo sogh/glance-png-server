@@ -151,13 +151,17 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     # playing, and with none there is no "us" at all.
     following = len(board.teams)
 
-    if snap["live"]:
-        return _live(c, snap["live"], accent, small, show_tv, tag, show_rank)
-
     size = int(params.get("crest", 14) or 14)
     margin = max(0, int(params.get("margin", 8) or 0))
-    crests = (_crests(ctx, snap["last"], size) if params.get("logos", True)
-              else None)
+    names = bool(params.get("names", True))
+    use_logos = bool(params.get("logos", True))
+
+    if snap["live"]:
+        return _live(c, snap["live"],
+                     _crests(ctx, snap["live"], size) if use_logos else None,
+                     accent, small, show_tv, tag, show_rank, names, margin)
+
+    crests = _crests(ctx, snap["last"], size) if use_logos else None
 
     y, align = 2, "left"
     if snap["last"] and crests:
@@ -166,7 +170,7 @@ def render_scores(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         # sits under it and to the right -- the result reads first, the next
         # fixture second.
         y = _result_crests(c, snap["last"], crests, accent, small, tag,
-                           show_rank, bool(params.get("names", True)), margin)
+                           show_rank, names, margin)
         align = "center"
     elif snap["last"]:
         _result(c, snap["last"], ctx.now, y, accent, small, tag, show_rank)
@@ -185,22 +189,48 @@ def _matchup(side, show_rank: bool) -> str:
     return f"{side.label(show_rank)} {'' if side.score is None else side.score}".strip()
 
 
-def _live(c, fixture, accent, small, show_tv, tag, show_rank):
-    """A game in progress earns the whole panel."""
+def _live(c, fixture, crests, accent, small, show_tv, tag, show_rank,
+          names=True, margin=8):
+    """A game in progress.
+
+    The same card as a finished one -- crests, scores, names -- with the half
+    inning in green where the result would go. It used to be a separate
+    layout, a wide line of plain text with no crest and no name on it, so the
+    one panel you actually stand and watch was the one that looked least like
+    the others.
+    """
+    if crests:
+        y = _result_crests(c, fixture, crests, accent, small, tag, show_rank,
+                           names, margin)
+        runs = [(fixture.detail or "LIVE", "green")]
+        if show_tv and fixture.broadcast:
+            runs.append((fixture.broadcast, dim("grey", 0.85)))
+        gap = 4
+        while len(runs) > 1 and _measure_runs(runs, small, gap) > c.width - 2 * margin:
+            runs.pop()
+        width = _measure_runs(runs, small, gap)
+        _draw_runs(c, max(margin, (c.width - width) // 2), y, runs, small, gap)
+        return c
+
+    # No usable crest for one of the sides: the wide scoreline, but centred
+    # inside the margins like everything else.
     big = get_font("5x7")
     text = (f"{_matchup(fixture.away, show_rank)}  "
             f"{_matchup(fixture.home, show_rank)}")
-    scale = 2 if big.measure(text) * 2 <= c.width - 6 else 1
-    c.centered(text, "white", big, y=3, max_width=c.width - 4, scale=scale)
+    room = c.width - 2 * margin
+    scale = 2 if big.measure(text) * 2 <= room else 1
+    c.centered(text, "white", big, y=4, max_width=room, scale=scale)
 
-    left = fixture.detail or "LIVE"
-    c.text(2, 23, left[:22], "green", small, max_width=96)
-    right = fixture.broadcast if show_tv else ""
-    if not right and tag:
-        right = tag
-    if right:
-        c.text(c.width - 2, 23, right, dim("grey", 0.9), small, "right",
-               max_width=c.width - 100)
+    runs = [(fixture.detail or "LIVE", "green")]
+    if show_tv and fixture.broadcast:
+        runs.append((fixture.broadcast, dim("grey", 0.85)))
+    elif tag:
+        runs.append((tag, dim("grey", 0.9)))
+    gap = 4
+    while len(runs) > 1 and _measure_runs(runs, small, gap) > room:
+        runs.pop()
+    width = _measure_runs(runs, small, gap)
+    _draw_runs(c, max(margin, (c.width - width) // 2), 23, runs, small, gap)
     return c
 
 

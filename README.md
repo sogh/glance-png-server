@@ -984,8 +984,10 @@ once, and named teams keep their place at the front as the poll churns. If the
 poll can't be fetched the board falls back to the cached one, then to just the
 named teams: a poll outage costs you the extra teams, not the panel.
 
-The panel shows **the last result and the next fixture together**, and hands
-the whole strip to a game in progress.
+The panel shows **the last result and the next fixture together**. A game in
+progress gets the same card with the half inning in green where the result
+would be — the one panel you actually stand and watch should not be the one
+that looks least like the others.
 
 With crests it is laid out in columns — rank, crest and score on top, the
 short team name centred underneath — and the next fixture moves **down and to

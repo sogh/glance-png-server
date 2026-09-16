@@ -75,7 +75,10 @@ def test_static_art_is_addressable_by_filename(client, project):
     Image.new("RGB", (192, 32), (0, 128, 255)).save(
         project / "assets" / "static" / "art.png"
     )
-    img = as_image(client.get("/s/static:art.png"))
+    # brightness=1 pins the time-of-day dimming. Without it this asserts an
+    # exact colour against whatever the evening ramp happens to be doing, so
+    # it passed all day and failed every night after 20:00.
+    img = as_image(client.get("/s/static:art.png?brightness=1"))
     assert img.convert("RGB").getpixel((96, 16)) == (0, 128, 255)
 
 
