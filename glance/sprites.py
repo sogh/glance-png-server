@@ -72,8 +72,48 @@ SWEATPANTS = Sprite(
 )
 
 
+# An orb web. Built from eight spokes and two rings rather than drawn freehand,
+# because a web is geometry and hand-placed pixels wobble.
+#
+# Two things make it read at this size. The hub is left OPEN: with the spokes
+# carried all the way in they merge into a solid bar across the middle and the
+# whole thing reads as a wheel. And there are only two rings -- three filled the
+# gaps between them and it turned to mush at 1:1.
+SPIDERWEB = Sprite(
+    rows=(
+        "............##...........",
+        "..........###.##.........",
+        "........##..#...##.......",
+        "......##....#.....##.....",
+        "....##......#.......#....",
+        "...#.#.....###.....##....",
+        "...#..#..##.#.##..#..#...",
+        "..#....##...#...##...#...",
+        "..#....##...#...##....#..",
+        ".#....#..#.....#..#...#..",
+        ".#....#...........#....#.",
+        "#....#.............#...#.",
+        "#########.......#########",
+        ".#...#.............#....#",
+        ".#....#...........#....#.",
+        "..#...#..#.....#..#....#.",
+        "..#....##...#...##....#..",
+        "...#...##...#...##....#..",
+        "...#..#..##.#.##..#..#...",
+        "....##.....###.....#.#...",
+        "....#.......#......##....",
+        ".....##.....#....##......",
+        ".......##...#..##........",
+        ".........##.###..........",
+        "...........##............",
+    ),
+    palette={"#": "#dcdce4"},      # old silk, not quite white
+)
+
+
 SPRITES: dict[str, Sprite] = {
     "sweatpants": SWEATPANTS,
+    "spiderweb": SPIDERWEB,
 }
 
 

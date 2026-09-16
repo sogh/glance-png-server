@@ -422,6 +422,15 @@ channels:
   main:
     - scene: holiday
       takeover: true
+    # A seasonal aside, in the rotation only while the season lasts -- see
+    # `when` in the carousel docs. Swap the sprite and the months for whatever
+    # yours is.
+    - scene: sprite
+      when: { months: [9, 10, 11] }
+      params:
+        before: "It's"
+        sprite: spiderweb
+        after: season!
     - scene: agenda
       params: { count: 1 }
     - scene: reminders
