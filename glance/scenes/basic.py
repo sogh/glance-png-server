@@ -8,6 +8,7 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
+from ..seasons import days_until
 from .base import Param, RenderContext, register
 
 
@@ -145,9 +146,80 @@ def render_blank(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     return c
 
 
-@register("countdown", description="Days remaining until a target date",
+def countdown_target(ctx, params) -> tuple[int, str] | None:
+    """Days remaining and a default label, or None if nothing is configured.
+
+    Three ways to say when:
+
+      season: fall            the real equinox, recomputed every year
+      date: 12-25             every year, rolling over once it passes
+      date: 2026-12-25        once
+
+    The season and the MM-DD form both renew themselves, which is the point.
+    A countdown pinned to a fixed date spends the eleven months after it
+    counting upwards, and a countdown to "fall" pinned to 09-22 is wrong about
+    one year in three -- the equinox moves.
+    """
+    season = str(params.get("season", "") or "").strip()
+    if season:
+        try:
+            days = days_until(
+                ctx.now, season,
+                hemisphere=str(params.get("hemisphere", "north")),
+                meteorological=bool(params.get("meteorological", False)))
+        except ValueError:
+            return None
+        return days, season.upper()
+
+    raw = str(params.get("date", "") or "").strip()
+    if not raw:
+        return None
+    try:
+        if len(raw) <= 5 and "-" in raw:
+            # MM-DD: this year's, or next year's once it has gone by.
+            month, day = (int(x) for x in raw.split("-"))
+            target = date(ctx.today.year, month, day)
+            if target < ctx.today:
+                target = date(ctx.today.year + 1, month, day)
+        else:
+            target = date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+    return (target - ctx.today).days, ""
+
+
+def _countdown_available(ctx: RenderContext, params: dict[str, Any]) -> bool:
+    """A countdown can schedule itself.
+
+    `within: 30` keeps it out of the rotation until the target is a month off,
+    which is what you want from a seasonal panel -- otherwise a countdown to
+    autumn spends nine months of the year taking a slot to say "271".
+    """
+    if params.get("always"):
+        return True
+    found = countdown_target(ctx, params)
+    if found is None:
+        return False
+    days, _ = found
+    within = int(params.get("within", 0) or 0)
+    return True if within <= 0 else 0 <= days <= within
+
+
+@register("countdown", available=_countdown_available,
+          description="Days remaining until a date or a season",
           params=[
-              Param("date", "text", None, help="Target date, YYYY-MM-DD"),
+              Param("date", "text", None,
+                    help="YYYY-MM-DD for a one-off, or MM-DD to repeat yearly"),
+              Param("season", "select", None,
+                    options=["", "spring", "summer", "autumn", "fall", "winter"],
+                    help="Count to the real equinox or solstice instead of a date"),
+              Param("hemisphere", "select", "north", options=["north", "south"],
+                    help="Which half of the planet the season belongs to"),
+              Param("meteorological", "bool", False,
+                    help="Use the 1st of the month rather than the astronomical moment"),
+              Param("within", "number", 0, minimum=0, maximum=400,
+                    help="Only appear when the target is this many days off; "
+                         "0 shows it always"),
               Param("label", "text", "", help="What it is counting to"),
               Param("color", "color", "amber", options="@colors"),
               Param("background", "color", "black", options="@colors"),
@@ -155,14 +227,13 @@ def render_blank(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
-    target_raw = params.get("date")
-    if not target_raw:
+    found = countdown_target(ctx, params)
+    if found is None:
         c.centered("no date set", "red", "3x5")
         return c
 
-    target = date.fromisoformat(str(target_raw)[:10])
-    days = (target - ctx.today).days
-    label = str(params.get("label", "")).upper()
+    days, default_label = found
+    label = str(params.get("label", "") or default_label).upper()
     color = params.get("color", "amber")
 
     if days == 0:

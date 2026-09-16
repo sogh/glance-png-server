@@ -47,7 +47,7 @@ You can also render one directly, which is how the preview page does it:
 | [`blank`](#blank) | An intentionally dark panel |
 | [`clock`](#clock) | Time and date |
 | [`columns`](#columns) | Three columns of upcoming events, packed by day |
-| [`countdown`](#countdown) | Days remaining until a target date |
+| [`countdown`](#countdown) | Days remaining until a date or a season |
 | [`date`](#date) | Day and date, no clock |
 | [`entities`](#entities) | Home Assistant entity states |
 | [`holiday`](#holiday) | The currently active holiday |
@@ -170,11 +170,15 @@ Three columns of upcoming events, packed by day
 
 ### `countdown`
 
-Days remaining until a target date
+Days remaining until a date or a season
 
 | Param | Type | Default | Means |
 |---|---|---|---|
-| `date` | text | — | Target date, YYYY-MM-DD. |
+| `date` | text | — | YYYY-MM-DD for a one-off, or MM-DD to repeat yearly. |
+| `season` | select | — | Count to the real equinox or solstice instead of a date. One of: ``, `spring`, `summer`, `autumn`, `fall`, `winter`. |
+| `hemisphere` | select | `north` | Which half of the planet the season belongs to. One of: `north`, `south`. |
+| `meteorological` | bool | `false` | Use the 1st of the month rather than the astronomical moment. |
+| `within` | number | `0` | Only appear when the target is this many days off; 0 shows it always. (min 0, max 400) |
 | `label` | text | — | What it is counting to. |
 | `color` | color | `amber` | One of: any palette colour or `#rrggbb`. |
 | `background` | color | `black` | One of: any palette colour or `#rrggbb`. |

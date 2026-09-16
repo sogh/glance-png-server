@@ -422,6 +422,14 @@ channels:
   main:
     - scene: holiday
       takeover: true
+    # Counting down to the real equinox, not to a date somebody typed. It
+    # schedules itself: `within: 30` keeps it out of the rotation until the
+    # target is a month off, so it is not taking a slot in March to say 190.
+    - scene: countdown
+      params:
+        season: fall
+        within: 30
+        color: amber
     # A seasonal aside, in the rotation only while the season lasts -- see
     # `when` in the carousel docs. Swap the sprite and the months for whatever
     # yours is.

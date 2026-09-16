@@ -354,6 +354,36 @@ pointed at the same deck agree.
 
 ---
 
+## `countdown` — to a date, or to a season
+
+```yaml
+- scene: countdown
+  params: { season: fall, within: 30 }      # the real equinox
+- scene: countdown
+  params: { date: "12-25", label: CHRISTMAS }   # every year
+- scene: countdown
+  params: { date: "2027-06-04", label: THE WEDDING }   # once
+```
+
+Three ways to say when, and two of them **renew themselves** — a countdown
+pinned to a fixed date spends the eleven months after it counting upwards.
+
+`season` computes the actual equinox or solstice (Meeus, accurate to a couple
+of minutes) rather than trusting a date someone typed. That matters more than
+it sounds: across 2020–2040 the September equinox falls on the 22nd in UTC
+fourteen times and the 23rd seven times — and which *local* date that is
+depends on your offset. It is the 22nd every single year in Los Angeles, split
+almost evenly in Berlin, and mostly the 23rd in Auckland. A hardcoded `09-22`
+is right where it was written and quietly wrong a few time zones away.
+
+`hemisphere: south` swaps which point begins which season. `meteorological:
+true` uses the 1st of the month instead, if that is the convention you mean.
+
+`within: 30` keeps it **out of the rotation** until the target is that close,
+so a countdown to autumn is not taking a slot in March to say 190.
+
+---
+
 ## Modes — a calendar event that changes what the panels show
 
 Put an event on the calendar called **`Farm tour #visitors`**. For exactly as
