@@ -118,6 +118,27 @@ sources:
     refresh: 900
     air_quality: true         # a second call, to a different Open-Meteo host
 
+    # Where the AQI comes from. EPA AirNow publishes what monitors actually
+    # measured; Open-Meteo derives it from an atmospheric model on a coarse
+    # grid and, here at least, reads high -- 53 against the 42 the nearest
+    # instrument reported the same hour, which is the difference between
+    # "Moderate" and "Good" on the panel.
+    #
+    #   airnow      measured, falling back to the model if no monitor answers
+    #   open-meteo  the model only
+    #
+    # Without a key this uses the undocumented endpoint behind airnow.gov,
+    # which works but could change without notice. A free key from
+    # airnowapi.org switches it to the documented API.
+    air_quality_source: airnow
+    airnow_api_key: "${GLANCE_AIRNOW_KEY:-}"
+
+    # AirNow returns the closest reading for each pollutant separately, from
+    # whatever station has one -- which here means PM2.5 from 13km away and
+    # PM10 from 27km. Past this radius a monitor is measuring somebody else's
+    # air, so it is dropped before the worst-pollutant rule is applied.
+    aqi_max_distance_km: 25
+
   # Instagram follower and post counts, via the official Graph API.
   #
   # Scraping the public profile does not work -- unauthenticated requests get

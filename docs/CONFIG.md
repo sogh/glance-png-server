@@ -146,10 +146,32 @@ sources:
     longitude: "${GLANCE_LON:-}"
     units: fahrenheit       # or celsius
     refresh: 900
-    air_quality: true       # a second call, to a different Open-Meteo host
+    air_quality: true              # show an AQI at all
+    air_quality_source: airnow     # airnow | open-meteo
+    airnow_api_key: "${GLANCE_AIRNOW_KEY:-}"   # optional
+    aqi_max_distance_km: 25
 ```
 
-Open-Meteo. No key, no account.
+Weather itself is Open-Meteo — no key, no account.
+
+**The AQI is a separate question.** Open-Meteo derives it from the CAMS
+atmospheric model on a grid roughly 11km across, so it describes the air over
+a region rather than a place. Measured against the nearest EPA monitor it read
+**53 where the instrument said 42** — twelve points is cosmetic, but it moved
+the panel from "Good" to "Moderate", which is the part anyone actually reads.
+
+So `air_quality_source: airnow` asks EPA AirNow first and keeps the model as
+the fallback, and a reading records which it was (`/api/status` reports the
+station and its distance). With no `airnow_api_key` it uses the undocumented
+endpoint behind airnow.gov — works, no signup, could change without notice. A
+free key from airnowapi.org switches it to the documented API.
+
+`aqi_max_distance_km` matters more than it looks. AirNow returns the closest
+reading **for each pollutant separately**, from whatever station happens to
+have one — here that is PM2.5 from 13km away, PM10 from 27km and ozone from
+43km. The EPA's AQI is the worst of them, so applying that rule unfiltered
+lets a reading from the next county describe your garden. Distance is applied
+first, then the worst-of rule among what is left.
 
 ### `sources.scoreboards`
 

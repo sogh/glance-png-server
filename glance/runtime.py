@@ -22,6 +22,7 @@ from .scenes.static_image import list_static
 from .sources.holidays import Holiday, active_holidays, load_holidays
 from .sources.calendars import CalendarSet
 from .sources.ics import CalendarSource
+from .sources.airquality import AirNowSource
 from .sources.espn import EspnSource
 from .sources.logos import LogoStore
 from .sources.mlb import MlbSource
@@ -82,6 +83,20 @@ class GlanceApp:
             except (TypeError, ValueError):
                 return None
 
+        # Measured beats modelled, so AirNow answers first where it can and
+        # Open-Meteo's CAMS figure is the fallback. `air_quality_source:
+        # open-meteo` turns the preference off.
+        air = None
+        if str(spec.get("air_quality_source", "airnow")).lower() == "airnow":
+            air = AirNowSource(
+                latitude=coord("latitude"),
+                longitude=coord("longitude"),
+                cache_dir=settings.cache_dir,
+                api_key=str(spec.get("airnow_api_key", "") or ""),
+                refresh=int(spec.get("refresh", 900)),
+                max_distance=float(spec.get("aqi_max_distance_km", 25)),
+            )
+
         source = WeatherSource(
             latitude=coord("latitude"),
             longitude=coord("longitude"),
@@ -89,6 +104,7 @@ class GlanceApp:
             units=str(spec.get("units", "fahrenheit")),
             refresh=int(spec.get("refresh", 900)),
             tz=settings.tz,
+            air_source=air,
         )
         source.air_quality = bool(spec.get("air_quality", True))
         return source
@@ -440,6 +456,9 @@ class GlanceApp:
                 "weather": {
                     "configured": self.weather.configured,
                     "last_error": self.weather.last_error,
+                    "air_quality": (self.weather.air_source.status()
+                                    if self.weather.air_source is not None
+                                    else {"source": "open-meteo"}),
                 },
                 "homeassistant": {
                     "configured": self.homeassistant.configured,

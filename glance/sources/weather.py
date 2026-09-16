@@ -14,6 +14,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from datetime import datetime
 
@@ -90,6 +91,8 @@ class Weather:
     sunrise: datetime | None = None
     sunset: datetime | None = None
     aqi: int | None = None                # US AQI
+    aqi_source: str = ""                  # "airnow" (measured) | "open-meteo" (modelled)
+    aqi_station: str = ""
     forecast: list["DayForecast"] = field(default_factory=list)
 
     @property
@@ -115,7 +118,7 @@ class WeatherSource:
     def __init__(self, latitude: float | None, longitude: float | None,
                  cache_dir: Path, units: str = "fahrenheit",
                  refresh: int = 900, timeout: float = 10.0,
-                 tz: ZoneInfo | None = None) -> None:
+                 tz: ZoneInfo | None = None, air_source: Any = None) -> None:
         # Open-Meteo is asked for timezone=auto, so sunrise and sunset arrive
         # as naive local times and need a zone attached to be comparable with
         # anything else.
@@ -130,6 +133,9 @@ class WeatherSource:
         self.cache_file = self.cache_dir / "weather.json"
         self.air_cache_file = self.cache_dir / "air-quality.json"
         self.air_quality = True
+        # Asked first when present; Open-Meteo's modelled figure is the
+        # fallback. See sources/airquality.py for why measured wins.
+        self.air_source = air_source
         self.last_error: str | None = None
         self._lock = threading.Lock()
 
@@ -217,6 +223,17 @@ class WeatherSource:
 
             air = self._air() or {}
             aqi_raw = (air.get("current") or {}).get("us_aqi")
+            aqi_source = "open-meteo" if aqi_raw is not None else ""
+            aqi_station = ""
+            if self.air_quality and self.air_source is not None:
+                try:
+                    measured = self.air_source.current()
+                except Exception:  # noqa: BLE001 - the model is the fallback
+                    measured = None
+                if measured is not None:
+                    aqi_raw = measured.aqi
+                    aqi_source = measured.source
+                    aqi_station = measured.station
             chance = (daily.get("precipitation_probability_max") or [None])[0]
 
             def when(key: str) -> datetime | None:
@@ -252,6 +269,8 @@ class WeatherSource:
                 precip_chance=None if chance is None else round(float(chance)),
                 precip_now=float(cur.get("precipitation", 0) or 0),
                 aqi=None if aqi_raw is None else round(float(aqi_raw)),
+                aqi_source=aqi_source,
+                aqi_station=aqi_station,
                 forecast=days,
                 sunrise=when("sunrise"),
                 sunset=when("sunset"),
