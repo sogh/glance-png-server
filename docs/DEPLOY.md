@@ -39,9 +39,9 @@ Three environment variables move things about, and the image sets all three:
 Artwork is mounted from `assets/static`, the same place it lives when you run
 without Docker, so the two do not quietly keep separate copies.
 
-Built and run on `linux/arm64` (Docker 29.8 via Colima): the image comes out at
-**289 MB**, starts healthy, seeds an empty `config/` on first run, writes its
-caches to `data/`, and serves every route including `/preview` and `/edit`.
+Built and run on **both `linux/arm64` and `linux/amd64`**: the image starts
+healthy, seeds an empty `config/` on first run, writes its caches to `data/`,
+and serves every route including `/preview` and `/edit`.
 
 ## Any machine with Python
 

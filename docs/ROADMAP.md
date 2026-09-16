@@ -75,16 +75,9 @@ Still thin:
 
 ## Known gaps
 
-- **The Docker image has only been built for arm64.** It builds, runs healthy
-  and serves everything on Apple silicon via Colima; `linux/amd64` is the
-  obvious next check, and a multi-arch `buildx` push would settle it.
 - **Instagram is untested against the live API.** The code handles both
   response shapes and every failure path, but it has never made a real call —
   that needs a Meta app and token.
-- **Only tested on Python 3.13 and 3.14.** The floor is declared 3.10 because
-  that is what the dependencies require; nothing between has been run.
-- **No CI.** The suite is fast, offline and deterministic, so a GitHub Actions
-  workflow running `pytest` across 3.10–3.13 is a small and obvious win.
 
 ## Ideas considered and parked
 
