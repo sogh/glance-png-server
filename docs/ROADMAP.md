@@ -73,16 +73,20 @@ Still thin:
 - **No walkthrough of a real first run** end to end, with a photograph of the
   hardware showing it.
 
-## Open items, unrelated to packaging
+## Known gaps
 
-- **`reminders` calendar not created.** `GLANCE_ICS_REMINDERS` is unset, so
-  that channel shows its empty state. The channel currently serves weather
-  instead.
+- **The Docker image has never been built.** The `Dockerfile` and compose file
+  were written on a machine with no Docker. The *layout* they describe is
+  tested — the server was run against the same `/config` + `/data` split and
+  served every route — but the build itself is unverified. First thing to
+  confirm.
 - **Instagram is untested against the live API.** The code handles both
   response shapes and every failure path, but it has never made a real call —
   that needs a Meta app and token.
-- **The UDM Pro's admin UI answers on the public internet.** Nothing to do
-  with this project; found while diagnosing the port forward. Worth closing.
+- **Only tested on Python 3.13 and 3.14.** The floor is declared 3.10 because
+  that is what the dependencies require; nothing between has been run.
+- **No CI.** The suite is fast, offline and deterministic, so a GitHub Actions
+  workflow running `pytest` across 3.10–3.13 is a small and obvious win.
 
 ## Ideas considered and parked
 

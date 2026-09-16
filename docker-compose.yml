@@ -1,0 +1,19 @@
+# docker compose up -d   then open http://localhost:8080/preview
+services:
+  glance:
+    build: .
+    # Or, once you have built and pushed it somewhere:
+    # image: ghcr.io/YOUR-NAME/glance-png-server:latest
+    container_name: glance-png-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/config     # settings.yaml, holidays, vocabulary, your art
+      - ./data:/data         # caches and rotation state; safe to delete
+    environment:
+      # Everything optional. See .env.example for the full list.
+      - TZ=UTC
+    env_file:
+      - path: .env
+        required: false

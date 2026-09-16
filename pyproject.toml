@@ -1,0 +1,45 @@
+# Metadata only. This is not published to PyPI and is not installed as a
+# package -- it runs from a checkout. The file exists so tooling and anyone
+# reading the repo can see what it is and what it needs.
+
+[project]
+name = "glance-png-server"
+version = "1.0.0"
+description = "A self-hosted PNG server for small pixel panels: one URL, many rotating panels, drawn from your own data."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["led-matrix", "pixel-art", "eink", "dashboard", "self-hosted",
+            "glance-scroll", "png", "home-automation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Home Automation",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pillow",
+    "PyYAML",
+    "httpx",
+    "icalendar",
+    "recurring-ical-events",
+    "tzdata",
+    "python-multipart",
+]
+
+[project.urls]
+Source = "https://github.com/YOUR-NAME/glance-png-server"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

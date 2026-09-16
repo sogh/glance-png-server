@@ -59,8 +59,15 @@ server:
 # this file: settings.yaml is hand-authored with comments, and round-tripping
 # it through a form would destroy them. Deleting the overlay reverts
 # everything to what is written here.
-paths:
-  overlay_file: data/overrides.json
+# paths:
+#   Everything defaults to sensible places beside the code -- data/overrides.json,
+#   data/cache, data/state.json, assets/static, and holidays.yaml and
+#   vocabulary/ beside this file. Set one here only to move it somewhere else.
+#
+#   Running in a container or from a package? Set GLANCE_DATA_DIR and
+#   GLANCE_STATIC_DIR instead and leave this alone -- an entry here overrides
+#   them, which is what you want for a deliberate choice and not what you want
+#   by accident.
 
 carousel:
   # advance = step to the next scene on every real fetch from the device.
@@ -251,8 +258,8 @@ sources:
 
   # Non-time-anchored reminders, for anything that does not belong on a
   # calendar. Optional now that reminders can come from a feed.
-  reminders_file:
-    path: data/reminders.json
+  # reminders_file:
+  #   path: data/reminders.json      # the default; uncomment only to move it
 
 # ---------------------------------------------------------------------------
 # Modes: a calendar event that changes what the panels show, while it runs.

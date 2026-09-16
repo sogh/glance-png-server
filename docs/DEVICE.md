@@ -63,32 +63,28 @@ The HTTP-only constraint rules out the obvious reflex of `cloudflared tunnel`,
 which hands back an `https://` hostname and redirects HTTP to HTTPS. An
 HTTP-only client cannot follow that.
 
-## The setup app's URL check — the one that will catch you out
+## Adding a private app: the URL is checked
 
-Adding a private app runs a verification step **the developer docs do not
-mention at all**. It rejects addresses on your own network: **[tested]**
+Adding a private app runs a verification step the developer docs do not
+mention. It resolves your hostname and inspects the address, and it refuses
+private and reserved ranges: **[tested]**
 
 ```
 Image verification failed. host resolves to a private/reserved IP - refused
 ```
 
-It resolves the hostname and then inspects the address, refusing private and
-reserved ranges. That is ordinary SSRF protection and correct on their side —
-a server that fetches user-supplied URLs can otherwise be aimed at cloud
-metadata endpoints. It simply contradicts the documentation's claim that *"a
-Raspberry Pi on your own network works too."*
+That is ordinary SSRF protection and correct on their side — a service that
+fetches user-supplied URLs can otherwise be aimed at cloud metadata endpoints.
+It does sit awkwardly against the documentation's claim that *"a Raspberry Pi
+on your own network works too."*
 
-Consequences worth knowing:
+The part worth knowing is that **verification happens only when you add the
+app**. Every fetch afterwards is the device asking your server directly, over
+whatever network they share. **[tested]**
 
-- A bare LAN IP is refused.
-- **A wildcard-DNS alias does not help.** `192.168.1.50.nip.io` resolves
-  publicly, but the verifier checks the resolved *address*, not the name.
-- **Verification happens only when you add the app.** Confirmed by experiment:
-  point the app at a temporarily-reachable URL, add it, then close the
-  forward — the device keeps fetching over the LAN indefinitely. **[tested]**
-
-The working shape is split-horizon DNS: a name that resolves publicly to
-something non-private, and locally to the server. See the deployment guide.
+So the server needs to be reachable from outside at the moment you add it, and
+after that it does not. [docs/DEPLOY.md](DEPLOY.md) covers the practical
+options.
 
 ## Community apps (and why their clock is wrong)
 

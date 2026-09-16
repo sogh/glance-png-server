@@ -159,6 +159,30 @@ def load_settings(path: str | Path | None = None) -> Settings:
         raw=raw,
     )
 
+    # Run from a container or an installed package and the data cannot live
+    # beside the code. These move it without editing anybody's settings.yaml,
+    # and an explicit `paths:` entry still wins over them.
+    data_dir = os.environ.get("GLANCE_DATA_DIR")
+    if data_dir:
+        base = Path(data_dir)
+        s.state_file = base / "state.json"
+        s.overlay_file = base / "overrides.json"
+        s.cache_dir = base / "cache"
+        s.todos_file = base / "reminders.json"
+    if os.environ.get("GLANCE_STATIC_DIR"):
+        s.static_dir = Path(os.environ["GLANCE_STATIC_DIR"])
+
+    # Files that belong WITH the config follow it. Point GLANCE_CONFIG at
+    # /config/settings.yaml and holidays.yaml and vocabulary/ are looked for
+    # beside it, which is where anyone would have put them.
+    beside = cfg_path.parent
+    if beside != PROJECT_ROOT:
+        for attr, name in (("holidays_file", "holidays.yaml"),
+                           ("vocabulary_dir", "vocabulary")):
+            candidate = beside / name
+            if candidate.exists():
+                setattr(s, attr, candidate)
+
     for attr, key in (
         ("state_file", "state_file"),
         ("overlay_file", "overlay_file"),
