@@ -164,3 +164,72 @@ def test_it_draws_something_for_every_form(app):
                    {"season": "summer", "hemisphere": "south"}, {}):
         canvas = scene.render(ctx, params)
         assert canvas.image.get_flattened_data().count((0, 0, 0)) < 192 * 32
+
+
+# --- autumn decoration ------------------------------------------------------
+
+def render(app, params):
+    return REGISTRY["countdown"].render(app.context(NOW, brightness=1.0), params)
+
+
+def lit_columns(canvas):
+    return {x for x in range(canvas.width) for y in range(canvas.height)
+            if canvas.image.getpixel((x, y)) != (0, 0, 0)}
+
+
+def test_leaves_appear_in_the_margins(app):
+    plain = render(app, {"season": "fall"})
+    leafy = render(app, {"season": "fall", "motif": "leaves"})
+    extra = lit_columns(leafy) - lit_columns(plain)
+    assert extra, "the motif drew nothing"
+    # All of it near the edges, not over the middle where the number is.
+    assert all(x < 40 or x > 152 for x in extra), sorted(extra)[:8]
+
+
+def test_leaves_are_mirrored_down_both_sides(app):
+    c = render(app, {"season": "fall", "motif": "leaves"})
+    cols = lit_columns(c)
+    assert any(x < 30 for x in cols) and any(x > 162 for x in cols)
+
+
+def test_a_wide_number_pushes_the_leaves_out_of_its_way(app):
+    """Nothing may be drawn over the digits; leaves that would collide are
+    dropped rather than overlapped."""
+    wide = render(app, {"date": "2026-12-25", "label": "FALL", "motif": "leaves"})
+    plain = render(app, {"date": "2026-12-25", "label": "FALL"})
+    # Every column the number uses looks identical with and without the motif.
+    for x in range(60, 132):
+        for y in range(0, 25):
+            assert wide.image.getpixel((x, y)) == plain.image.getpixel((x, y)), (x, y)
+
+
+def test_the_scatter_does_not_move_between_renders(app):
+    """A scatter that changed on every fetch would flicker between refreshes
+    and read as a fault."""
+    a = render(app, {"season": "fall", "motif": "leaves"})
+    b = render(app, {"season": "fall", "motif": "leaves"})
+    assert a.image.get_flattened_data() == b.image.get_flattened_data()
+
+
+def test_a_single_digit_keeps_the_start_colour(app):
+    """text_gradient steps per character, so one digit lands on the far end and
+    the start colour is lost entirely -- "6 DAYS" came out red with no amber."""
+    from glance.palette import parse
+    one = render(app, {"date": "2026-09-22", "label": "FALL",
+                       "color": "amber", "gradient_to": "red"})
+    colours = {p for p in one.image.get_flattened_data() if p != (0, 0, 0)}
+    assert parse("amber") in colours
+    assert parse("red") not in colours
+
+
+def test_two_digits_actually_ramp(app):
+    from glance.palette import parse
+    many = render(app, {"date": "2026-11-01", "label": "FALL",
+                        "color": "amber", "gradient_to": "red"})
+    colours = {p for p in many.image.get_flattened_data() if p != (0, 0, 0)}
+    assert parse("amber") in colours and parse("red") in colours
+
+
+def test_the_motif_is_off_unless_asked_for(app):
+    assert lit_columns(render(app, {"season": "fall"})) == \
+           lit_columns(render(app, {"season": "fall", "motif": "none"}))

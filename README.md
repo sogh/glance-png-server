@@ -382,6 +382,12 @@ true` uses the 1st of the month instead, if that is the convention you mean.
 `within: 30` keeps it **out of the rotation** until the target is that close,
 so a countdown to autumn is not taking a slot in March to say 190.
 
+`motif: leaves` scatters autumn leaves down both margins, and `gradient_to`
+ramps the digits from `color` to that — amber to red reads as autumn without
+needing to say so. The scatter is fixed rather than random: one that changed
+between fetches would flicker and read as a fault. Leaves that would collide
+with a wide number are dropped rather than drawn over it.
+
 ---
 
 ## Modes — a calendar event that changes what the panels show

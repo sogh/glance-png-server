@@ -111,9 +111,59 @@ SPIDERWEB = Sprite(
 )
 
 
+# Leaves. The palette is per-sprite, but `color_for` takes an override, which
+# is how the countdown scatters the same leaf in half a dozen autumn shades
+# without needing half a dozen sprites.
+MAPLE_LEAF = Sprite(
+    rows=(
+        "....#....",
+        ".#..#..#.",
+        ".##.#.##.",
+        "..#####..",
+        ".#######.",
+        "..#####..",
+        "...###...",
+        "....#....",
+        "....#....",
+    ),
+    palette={"#": "#e07414"},
+)
+
+OAK_LEAF = Sprite(
+    rows=(
+        "...##....",
+        "..####...",
+        ".#####...",
+        "..####...",
+        ".#####...",
+        "..####...",
+        "...###...",
+        "....#....",
+        "....#....",
+    ),
+    palette={"#": "#b4541a"},
+)
+
+# Too small to be any particular tree. For leaves far enough away that the
+# shape has stopped mattering.
+LEAF_SPECK = Sprite(
+    rows=(
+        ".###.",
+        "#####",
+        "#####",
+        ".###.",
+        "..#..",
+    ),
+    palette={"#": "#c8641c"},
+)
+
+
 SPRITES: dict[str, Sprite] = {
     "sweatpants": SWEATPANTS,
     "spiderweb": SPIDERWEB,
+    "maple": MAPLE_LEAF,
+    "oak": OAK_LEAF,
+    "leaf": LEAF_SPECK,
 }
 
 

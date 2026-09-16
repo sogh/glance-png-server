@@ -178,6 +178,8 @@ Days remaining until a date or a season
 | `season` | select | — | Count to the real equinox or solstice instead of a date. One of: ``, `spring`, `summer`, `autumn`, `fall`, `winter`. |
 | `hemisphere` | select | `north` | Which half of the planet the season belongs to. One of: `north`, `south`. |
 | `meteorological` | bool | `false` | Use the 1st of the month rather than the astronomical moment. |
+| `motif` | select | `none` | Decoration around the number; leaves for autumn. One of: `none`, `leaves`. |
+| `gradient_to` | color | — | Ramp the number from `color` to this across its digits. One of: any palette colour or `#rrggbb`. |
 | `within` | number | `0` | Only appear when the target is this many days off; 0 shows it always. (min 0, max 400) |
 | `label` | text | — | What it is counting to. |
 | `color` | color | `amber` | One of: any palette colour or `#rrggbb`. |

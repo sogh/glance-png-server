@@ -429,7 +429,9 @@ channels:
       params:
         season: fall
         within: 30
+        motif: leaves         # autumn leaves down both margins
         color: amber
+        gradient_to: red      # the digits ramp amber -> red
     # A seasonal aside, in the rotation only while the season lasts -- see
     # `when` in the carousel docs. Swap the sprite and the months for whatever
     # yours is.

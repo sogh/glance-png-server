@@ -9,6 +9,7 @@ from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
 from ..seasons import days_until
+from ..sprites import SPRITES, draw_sprite
 from .base import Param, RenderContext, register
 
 
@@ -217,6 +218,10 @@ def _countdown_available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="Which half of the planet the season belongs to"),
               Param("meteorological", "bool", False,
                     help="Use the 1st of the month rather than the astronomical moment"),
+              Param("motif", "select", "none", options=["none", "leaves"],
+                    help="Decoration around the number; leaves for autumn"),
+              Param("gradient_to", "color", None, options="@colors",
+                    help="Ramp the number from `color` to this across its digits"),
               Param("within", "number", 0, minimum=0, maximum=400,
                     help="Only appear when the target is this many days off; "
                          "0 shows it always"),
@@ -236,20 +241,68 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     label = str(params.get("label", "") or default_label).upper()
     color = params.get("color", "amber")
 
+    motif = str(params.get("motif", "none"))
+    ramp = params.get("gradient_to")
+
     if days == 0:
-        c.centered(label or "TODAY", color, "5x7", y=12, scale=2)
+        text = label or "TODAY"
+        font = get_font("5x7")
+        width = font.measure(text) * 2
+        if motif == "leaves":
+            _leaves(c, (c.width - width) // 2 - 4, (c.width + width) // 2 + 4)
+        if ramp:
+            c.text_gradient(c.width // 2, 12, text, color, ramp, font, "center", 2)
+        else:
+            c.centered(text, color, font, y=12, scale=2)
         return c
 
     number = str(abs(days))
     word = "DAY" if abs(days) == 1 else "DAYS"
     tail = word if days > 0 else f"{word} AGO"
+    scale = 3 if len(number) <= 3 else 2
+    big = get_font("5x7mono")
+    width = big.measure(number) * scale
 
-    c.centered(number, color, "5x7mono", y=3, scale=3 if len(number) <= 3 else 2)
-    if label:
-        c.centered(f"{tail} TO {label}", dim(color, 0.8), "3x5", y=26)
+    # Leaves first, so the number sits on top of anything that strays.
+    if motif == "leaves":
+        _leaves(c, (c.width - width) // 2 - 5, (c.width + width) // 2 + 5)
+
+    # A ramp needs something to ramp across: text_gradient steps per character,
+    # so a single digit lands on the far end and the start colour is simply
+    # lost. "6 DAYS" would come out red with no amber in it at all.
+    if ramp and len(number) > 1:
+        c.text_gradient(c.width // 2, 3, number, color, ramp, big, "center", scale)
     else:
-        c.centered(tail, dim(color, 0.8), "3x5", y=26)
+        c.centered(number, color, big, y=3, scale=scale)
+
+    caption = f"{tail} TO {label}" if label else tail
+    c.centered(caption, dim(color, 0.8), "3x5", y=26)
     return c
+
+
+# Where each leaf sits, which leaf it is, and what colour -- fixed rather than
+# random. A scatter that changed on every fetch would flicker between refreshes
+# and read as a fault; this is the same arrangement every time, chosen once by
+# eye. Positions are from the panel edge inward, mirrored on the right.
+_FALL = (
+    (2, 1, "maple", "#e07414"),
+    (13, 12, "oak", "#a8481a"),
+    (4, 19, "leaf", "#c8641c"),
+    (17, 3, "leaf", "#8f3f12"),
+    (9, 24, "leaf", "#d2891f"),
+)
+
+
+def _leaves(c: Canvas, left_edge: int, right_edge: int) -> None:
+    """Autumn leaves down both margins, clear of the number between them."""
+    for dx, y, name, colour in _FALL:
+        sprite = SPRITES.get(name)
+        if sprite is None:
+            continue
+        # Left margin, then the mirror of it on the right.
+        for x in (dx, c.width - dx - sprite.width):
+            if x + sprite.width <= left_edge or x >= right_edge:
+                draw_sprite(c, sprite, x, y, override={"#": colour})
 
 
 @register("panels", description="Test card: shows the physical 64px modules",
