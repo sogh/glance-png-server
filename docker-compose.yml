@@ -3,7 +3,7 @@ services:
   glance:
     build: .
     # Or, once you have built and pushed it somewhere:
-    # image: ghcr.io/YOUR-NAME/glance-png-server:latest
+    # image: ghcr.io/sogh/glance-png-server:latest
     container_name: glance-png-server
     restart: unless-stopped
     ports:

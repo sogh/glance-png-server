@@ -38,7 +38,8 @@ dependencies = [
 ]
 
 [project.urls]
-Source = "https://github.com/YOUR-NAME/glance-png-server"
+Source = "https://github.com/sogh/glance-png-server"
+Issues = "https://github.com/sogh/glance-png-server/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -17,7 +17,7 @@ Everything else is code.
 ## Docker
 
 ```bash
-git clone <this repo> && cd glance-png-server
+git clone https://github.com/sogh/glance-png-server.git && cd glance-png-server
 cp .env.example .env          # optional; fill in what you use
 docker compose up -d
 ```
@@ -48,7 +48,7 @@ and serves every route including `/preview` and `/edit`.
 Needs **Python 3.10 or newer**.
 
 ```bash
-git clone <this repo> && cd glance-png-server
+git clone https://github.com/sogh/glance-png-server.git && cd glance-png-server
 cp .env.example .env
 ./run.sh
 ```
