@@ -227,13 +227,25 @@ class Canvas:
 
         Quantizing to a palette typically cuts these files to a couple of KB.
         Well under the 1 MB response cap either way, but a smaller body means a
-        faster fetch inside the device's ~4s request timeout.
+        faster fetch inside the device's ~4s request timeout -- and, more to
+        the point, a much smaller decode on the far end.
+
+        `getcolors` returns None when the image has MORE colours than the limit
+        asked for, and the old code read that as "cannot quantize" and emitted
+        24-bit truecolour. That is exactly backwards: an image with too many
+        colours is the one that most needs reducing. A panel of team crests has
+        around 800, so it was the single heaviest thing served -- 18 KB of
+        inflated scanlines against 3-6 KB for everything else, and three times
+        the bytes on the wire.
+
+        256 is not a compromise at this size. The panel is 6,144 pixels with a
+        PWM floor under it; nothing on it can show that many shades anyway.
         """
         out = self.image
         if quantize:
             colors = out.getcolors(maxcolors=256)
-            if colors is not None:
-                out = out.convert("P", palette=Image.Palette.ADAPTIVE, colors=max(2, len(colors)))
+            wanted = max(2, len(colors)) if colors is not None else 256
+            out = out.convert("P", palette=Image.Palette.ADAPTIVE, colors=wanted)
         buf = io.BytesIO()
         out.save(buf, format="PNG", optimize=True, compress_level=9)
         return buf.getvalue()

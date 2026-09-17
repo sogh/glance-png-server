@@ -111,7 +111,28 @@ def project(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def app(project: Path) -> GlanceApp:
-    return GlanceApp.from_config(project / "config" / "settings.yaml")
+    glance = GlanceApp.from_config(project / "config" / "settings.yaml")
+
+    # Render at full brightness unless a test says otherwise.
+    #
+    # Dimming is applied on the way out of render_scene and render_channel, so
+    # a test asserting an exact colour was really asserting "that colour, times
+    # whatever the evening ramp is doing right now". They passed in the
+    # afternoon and failed before dawn -- eleven of them, found by pinning the
+    # level and re-running rather than by waiting for CI to go red at 6am.
+    #
+    # Passing a context or an explicit brightness still overrides this, which
+    # is how test_brightness.py goes on testing the ramp.
+    for name in ("render_scene", "render_channel"):
+        original = getattr(glance, name)
+
+        def pinned(*args, _original=original, **kwargs):
+            if kwargs.get("ctx") is None and kwargs.get("brightness") is None:
+                kwargs["brightness"] = 1.0
+            return _original(*args, **kwargs)
+
+        setattr(glance, name, pinned)
+    return glance
 
 
 TAGGED_ICS = """BEGIN:VCALENDAR

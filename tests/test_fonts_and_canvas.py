@@ -155,3 +155,68 @@ def test_the_percent_sign_is_not_a_question_mark():
     assert FONT_3X5.mask("%").getbbox() != FONT_3X5.mask("?").getbbox() or \
         FONT_3X5.measure("%") > 0
     assert "%" in FONT_3X5.source
+
+
+# --- what the device has to decode ------------------------------------------
+
+def png_facts(data: bytes):
+    """(bit depth, colour type, inflated scanline bytes) straight from the file."""
+    import struct
+    import zlib
+
+    width, height, depth, ctype = struct.unpack(">IIBB", data[16:26])
+    offset, idat = 8, b""
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        if data[offset + 4:offset + 8] == b"IDAT":
+            idat += data[offset + 8:offset + 8 + length]
+        offset += 12 + length
+    return depth, ctype, len(zlib.decompress(idat))
+
+
+PALETTE, TRUECOLOUR = 3, 2
+
+
+def test_a_busy_panel_is_still_palette_encoded():
+    """`getcolors(256)` returns None when there are MORE than 256 colours, and
+    reading that as "cannot quantize" emitted 24-bit truecolour for exactly the
+    images that most needed reducing. A crest panel has ~800 colours and was
+    three times the inflated size of anything else on the strip."""
+    from glance.canvas import Canvas
+
+    busy = Canvas(width=192)
+    for x in range(192):                       # ~6000 distinct colours
+        for y in range(32):
+            busy.pixel(x, y, (x % 256, (y * 8) % 256, (x * y) % 256))
+    assert busy.image.getcolors(maxcolors=256) is None, "fixture is not busy enough"
+
+    depth, ctype, inflated = png_facts(busy.to_png(quantize=True))
+    assert ctype == PALETTE, "fell back to truecolour"
+    assert depth <= 8
+    assert inflated <= 192 * 32 + 32, inflated       # one byte per pixel, plus filters
+
+
+def test_quantising_leaves_a_simple_panel_alone():
+    from glance.canvas import Canvas
+
+    plain = Canvas(width=192)
+    plain.clear("black")
+    plain.text(4, 12, "HELLO", "amber", "5x7")
+    depth, ctype, _ = png_facts(plain.to_png(quantize=True))
+    assert ctype == PALETTE
+    assert depth <= 4, "a handful of colours should not need 8 bits"
+
+
+def test_every_registered_scene_decodes_small(app, now):
+    """The device has to hold this. Nothing should need more than one byte per
+    pixel of scanline data."""
+    from glance.scenes import REGISTRY
+
+    budget = 192 * 32 + 64
+    for scene_id in sorted(REGISTRY):
+        if scene_id == "static":
+            continue
+        canvas, _ = app.render_scene(scene_id, {}, app.context(now))
+        depth, ctype, inflated = png_facts(app.png(canvas))
+        assert ctype == PALETTE, f"{scene_id} is truecolour"
+        assert inflated <= budget, f"{scene_id} inflates to {inflated}b"
