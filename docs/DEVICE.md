@@ -86,6 +86,57 @@ So the server needs to be reachable from outside at the moment you add it, and
 after that it does not. [docs/DEPLOY.md](DEPLOY.md) covers the practical
 options.
 
+## Keep one stock app installed
+
+A rotation containing **only private apps** reboots the device roughly every
+150 seconds — about 25 times an hour. Installing any single stock app stops it
+completely. **[tested]**
+
+| | private apps only | + one stock app |
+|---|---|---|
+| Reboots | ~25/hr, steady across every window sampled | **0** |
+| Longest clean run | none | 50 min, where ~21 were expected |
+
+This is worth stating plainly because **every symptom points at your server**.
+The device boots, refetches every slot at once, runs for two minutes and
+reboots — so what you see in your access log is a burst of requests for all
+your channels every couple of minutes, forever. The natural suspects are image
+size, PNG format, too many slots, a slow response. All of them are wrong, and
+all of them are things you can spend a day tuning without effect.
+
+None of it mattered here: the payloads were 150–600 byte palette PNGs, every
+one of 4,597 requests returned `200 OK`, and the same six private apps had run
+for a full day without a single reboot while one stock app was still
+installed. The only thing that changed was the last stock app being removed.
+
+The likely mechanism is that private apps are fetched **straight from your own
+network**, so an all-private rotation is the one configuration in which the
+device never has any reason to contact Glance's servers at all. That path
+appears not to be handled.
+
+The fix costs one slot and about twelve seconds of screen time per cycle: keep
+a stock app you don't mind parked in the rotation.
+
+### Telling a reboot from a quiet device
+
+The device's **source port** is the signal, and your access log already has
+it. A healthy device holds one monotonically increasing ephemeral-port
+sequence for days — through idle stretches and overnight sleeps. A reboot
+re-randomises the base, so every restart appears as a discontinuity:
+
+```
+17:49:27  main    port 54206     healthy: 54008 -> 54206 unbroken, 20 minutes
+17:50:01  main    port 56988     rebooted - base re-randomised
+17:50:01  date    port 56989     every slot refetched inside one second
+```
+
+Count the jumps larger than a couple of hundred and you have reboots per hour.
+
+**Do not use ping for this.** These panels run aggressive WiFi power saving:
+ICMP latency runs ~100x the LAN norm, with frequent multi-second gaps, even
+when the device is perfectly healthy and serving every request. A ping log
+will convince you the network is broken when it is not. **[tested]**
+
 ## Community apps (and why their clock is wrong)
 
 Apps published to the catalogue are **Starlark** (`app.star` + `manifest.yaml`)
@@ -107,5 +158,7 @@ cannot reach your LAN at all — the topology forbids it, not a filter.
 - **Pace is yours to control, not the device's.** It decides when to fetch;
   the only lever is returning the same thing until you want it to change.
   That is what per-entry `dwell` is for.
+- **Keep one stock app.** An all-private rotation reboots the device every
+  ~150s. Costs a slot; saves a weekend of blaming your own PNGs.
 - **Design for glanceability.** *"A photo shrunk to 32 pixels turns to mush; a
   chunky icon and large text look great."* **[docs]**
