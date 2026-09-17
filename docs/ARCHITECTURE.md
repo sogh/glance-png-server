@@ -23,6 +23,7 @@ device ──GET /c/<channel>.png──▶ server
 |---|---|
 | `canvas.py` | The drawing surface. Rects, discs, text, gradients, PNG encoding. |
 | `fonts.py` | Three hand-authored bitmap fonts, composed diacritics, and layout. |
+| `layout.py` | Where things sit: the centring rule and its helpers. |
 | `palette.py` | LED-safe colours, PWM floor snapping, mixing. |
 | `sprites.py` | Pixel art as editable character grids. |
 | `weathericons.py` | Weather glyphs drawn from primitives. |
@@ -37,6 +38,26 @@ device ──GET /c/<channel>.png──▶ server
 | `sources/` | Calendars, reminders, holidays, weather, baseball, Instagram, modes, scoreboards. |
 
 ## Decisions worth knowing
+
+**Content is centred as a single group, inside a margin, and the blank that is
+left over lands at the two edges.** `layout.py` holds the rule; every scene
+that places anything goes through it. Three corollaries, each of which was a
+bug before it was a rule:
+
+- *As a single group.* Centre the parts separately, or pin one to each edge,
+  and a longer label visibly shoves the middle across -- `MARINERS` and `WPBL`
+  stopped lining up with each other.
+- *Inside a margin.* The device pans one app straight into the next, so a pane
+  inked edge to edge runs into its neighbour. The margin is a floor, not an
+  inset: narrow content is centred and already clears it. A row that cannot fit
+  sheds its least important part -- the broadcast, then the day -- rather than
+  crossing it.
+- *Measure, then place.* A row's width is not known until it is full, so
+  packing and drawing in one pass can only left-align. Two passes, always.
+
+Decoration follows the content, not the panel: the countdown's leaves are
+positioned outward from the edge of the words, so they stay beside them as the
+number grows instead of floating at the margins with a gulf between.
 
 **Accents are composed, not drawn.** A lowercase 5x7 letter sits in rows 2-6,
 so the two rows above it are free for a mark. A capital fills all seven and

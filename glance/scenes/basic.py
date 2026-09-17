@@ -8,6 +8,7 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..palette import dim
+from ..layout import centre
 from ..seasons import days_until
 from ..sprites import SPRITES, draw_sprite
 from .base import Param, RenderContext, register
@@ -249,7 +250,7 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         font = get_font("5x7")
         width = font.measure(text) * 2
         if motif == "leaves":
-            _leaves(c, (c.width - width) // 2 - 4, (c.width + width) // 2 + 4)
+            _leaves(c, centre(c.width, width), centre(c.width, width) + width)
         if ramp:
             c.text_gradient(c.width // 2, 12, text, color, ramp, font, "center", 2)
         else:
@@ -263,9 +264,13 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     big = get_font("5x7mono")
     width = big.measure(number) * scale
 
-    # Leaves first, so the number sits on top of anything that strays.
+    caption = f"{tail} TO {label}" if label else tail
+    # The caption is usually wider than the number, and the leaves hug
+    # whichever is wider -- otherwise they sit beside a narrow "6" and overlap
+    # "DAYS TO FALL" underneath it.
+    content = max(width, get_font("3x5").measure(caption))
     if motif == "leaves":
-        _leaves(c, (c.width - width) // 2 - 5, (c.width + width) // 2 + 5)
+        _leaves(c, centre(c.width, content), centre(c.width, content) + content)
 
     # A ramp needs something to ramp across: text_gradient steps per character,
     # so a single digit lands on the far end and the start colour is simply
@@ -275,33 +280,36 @@ def render_countdown(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     else:
         c.centered(number, color, big, y=3, scale=scale)
 
-    caption = f"{tail} TO {label}" if label else tail
     c.centered(caption, dim(color, 0.8), "3x5", y=26)
     return c
 
 
-# Where each leaf sits, which leaf it is, and what colour -- fixed rather than
-# random. A scatter that changed on every fetch would flicker between refreshes
-# and read as a fault; this is the same arrangement every time, chosen once by
-# eye. Positions are from the panel edge inward, mirrored on the right.
+# Which leaf, what colour, and how far OUT from the text it sits -- see
+# layout.py: decoration follows the content, not the panel. Measured outward
+# from the edge of the words, so the leaves stay beside them however wide the
+# number gets instead of floating out at the margins with a gulf between.
+#
+# Fixed rather than random. A scatter that changed on every fetch would
+# flicker between refreshes and read as a rendering fault rather than as
+# weather; this is the same arrangement every time, chosen once by eye.
 _FALL = (
-    (2, 1, "maple", "#e07414"),
-    (13, 12, "oak", "#a8481a"),
-    (4, 19, "leaf", "#c8641c"),
-    (17, 3, "leaf", "#8f3f12"),
-    (9, 24, "leaf", "#d2891f"),
+    (1, 1, "maple", "#e07414"),
+    (14, 11, "oak", "#a8481a"),
+    (4, 20, "leaf", "#c8641c"),
+    (20, 2, "leaf", "#8f3f12"),
+    (11, 25, "leaf", "#d2891f"),
 )
 
 
 def _leaves(c: Canvas, left_edge: int, right_edge: int) -> None:
-    """Autumn leaves down both margins, clear of the number between them."""
-    for dx, y, name, colour in _FALL:
+    """Autumn leaves either side of the text, working outward from it."""
+    for out, y, name, colour in _FALL:
         sprite = SPRITES.get(name)
         if sprite is None:
             continue
-        # Left margin, then the mirror of it on the right.
-        for x in (dx, c.width - dx - sprite.width):
-            if x + sprite.width <= left_edge or x >= right_edge:
+        # Just past the words on the left, and its mirror on the right.
+        for x in (left_edge - out - sprite.width, right_edge + out):
+            if 0 <= x and x + sprite.width <= c.width:
                 draw_sprite(c, sprite, x, y, override={"#": colour})
 
 

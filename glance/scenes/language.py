@@ -18,6 +18,7 @@ from typing import Any
 
 from ..canvas import Canvas
 from ..fonts import get_font
+from ..layout import centre
 from ..palette import dim
 from .base import Param, RenderContext, register
 
@@ -137,6 +138,6 @@ def _term(c: Canvas, entry, y: int, font, scale: int, params: dict[str, Any]) ->
 
     gap = 2 * scale
     widths = (font.measure(article) * scale, font.measure(entry.rest) * scale)
-    x = max(2, (c.width - (widths[0] + gap + widths[1])) // 2)
+    x = centre(c.width, widths[0] + gap + widths[1], margin=2)
     c.text(x, y, article, article_colour, font, "left", None, scale)
     c.text(x + widths[0] + gap, y, entry.rest, colour, font, "left", None, scale)

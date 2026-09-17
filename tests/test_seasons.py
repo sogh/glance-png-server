@@ -177,30 +177,49 @@ def lit_columns(canvas):
             if canvas.image.getpixel((x, y)) != (0, 0, 0)}
 
 
-def test_leaves_appear_in_the_margins(app):
-    plain = render(app, {"season": "fall"})
-    leafy = render(app, {"season": "fall", "motif": "leaves"})
-    extra = lit_columns(leafy) - lit_columns(plain)
-    assert extra, "the motif drew nothing"
-    # All of it near the edges, not over the middle where the number is.
-    assert all(x < 40 or x > 152 for x in extra), sorted(extra)[:8]
+def lit_pixels(canvas):
+    return {(x, y) for x in range(canvas.width) for y in range(canvas.height)
+            if canvas.image.getpixel((x, y)) != (0, 0, 0)}
 
 
-def test_leaves_are_mirrored_down_both_sides(app):
-    c = render(app, {"season": "fall", "motif": "leaves"})
-    cols = lit_columns(c)
-    assert any(x < 30 for x in cols) and any(x > 162 for x in cols)
+def test_leaves_sit_beside_the_text_not_out_at_the_edges(app):
+    """Decoration follows the content, not the panel -- see layout.py. Pinned
+    to the margins they float with a gulf between them and the words."""
+    plain = lit_pixels(render(app, {"season": "fall"}))
+    leafy = lit_pixels(render(app, {"season": "fall", "motif": "leaves"}))
+    added = {x for x, _ in leafy - plain}
+    words = {x for x, _ in plain}
+    assert added, "the motif drew nothing"
+    # Close to the text: within about a leaf-and-a-half of it on either side.
+    assert min(words) - max(x for x in added if x < min(words)) < 40
+    assert min(x for x in added if x > max(words)) - max(words) < 40
 
 
-def test_a_wide_number_pushes_the_leaves_out_of_its_way(app):
-    """Nothing may be drawn over the digits; leaves that would collide are
-    dropped rather than overlapped."""
-    wide = render(app, {"date": "2026-12-25", "label": "FALL", "motif": "leaves"})
-    plain = render(app, {"date": "2026-12-25", "label": "FALL"})
-    # Every column the number uses looks identical with and without the motif.
-    for x in range(60, 132):
-        for y in range(0, 25):
-            assert wide.image.getpixel((x, y)) == plain.image.getpixel((x, y)), (x, y)
+def test_leaves_never_land_on_the_words(app):
+    """Whatever the motif adds, it adds outside the text."""
+    for target in ("2026-09-22", "2026-11-01", "2026-12-25"):
+        params = {"date": target, "label": "FALL"}
+        plain = lit_pixels(render(app, params))
+        leafy = lit_pixels(render(app, {**params, "motif": "leaves"}))
+        assert plain <= leafy, "the motif erased part of the text"
+        columns = {x for x, _ in plain}
+        assert not {x for x, _ in leafy - plain} & columns, target
+
+
+def test_leaves_move_outward_as_the_number_grows(app):
+    narrow = lit_pixels(render(app, {"date": "2026-09-22", "label": "FALL",
+                                     "motif": "leaves"}))
+    wide = lit_pixels(render(app, {"date": "2026-12-25", "label": "FALL",
+                                   "motif": "leaves"}))
+    assert min(x for x, _ in wide) < min(x for x, _ in narrow)
+
+
+def test_the_whole_thing_stays_inside_the_margin(app):
+    from glance.layout import MARGIN
+    for target in ("2026-09-17", "2026-12-25", "2026-09-16"):
+        c = render(app, {"date": target, "label": "FALL", "motif": "leaves"})
+        xs = {x for x, _ in lit_pixels(c)}
+        assert min(xs) >= MARGIN and max(xs) <= c.width - MARGIN, target
 
 
 def test_the_scatter_does_not_move_between_renders(app):

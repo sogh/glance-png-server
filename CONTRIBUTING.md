@@ -48,6 +48,11 @@ of its inputs and can be tested without a network.
 no animation. See [docs/DEVICE.md](docs/DEVICE.md) — most of the surprising
 decisions here are downstream of something in that file.
 
+**Centre content as one group, inside a margin.** `layout.py` has the rule and
+the helpers; use them rather than working out `(width - content) // 2` again.
+The margin is a floor, not an inset, and decoration follows the content rather
+than the panel edge. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 **Never block a render.** The device gives up after about four seconds and
 caches whatever it last got, so a slow fetch shows a stale panel with no
 indication anything is wrong. Sources cache to disk and serve stale data

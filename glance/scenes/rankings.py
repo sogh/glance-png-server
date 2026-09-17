@@ -11,6 +11,7 @@ from typing import Any
 
 from ..canvas import Canvas
 from ..fonts import get_font
+from ..layout import centre, span
 from ..palette import dim
 from .base import Param, RenderContext, register
 from .scores import _board
@@ -113,8 +114,7 @@ def _pack(cells: list[int], room: int, rows: int, gap: int) -> list[list[int]]:
 def _centred(c: Canvas, widths: list[int], indexes: list[int], gap: int,
              margin: int) -> int:
     """Left edge for a row, so its content sits in the middle of the strip."""
-    span = sum(widths[i] for i in indexes) + gap * (len(indexes) - 1)
-    return max(margin, (c.width - span) // 2)
+    return centre(c.width, span([widths[i] for i in indexes], gap), margin)
 
 
 def _lay_out(c, cells, rows, gap, margin, asked):

@@ -12,6 +12,7 @@ from typing import Any
 
 from ..canvas import Canvas
 from ..fonts import get_font
+from ..layout import centre
 from ..palette import dim
 from .base import Param, RenderContext, register
 
@@ -209,7 +210,7 @@ def _live(c, fixture, crests, accent, small, show_tv, tag, show_rank,
         while len(runs) > 1 and _measure_runs(runs, small, gap) > c.width - 2 * margin:
             runs.pop()
         width = _measure_runs(runs, small, gap)
-        _draw_runs(c, max(margin, (c.width - width) // 2), y, runs, small, gap)
+        _draw_runs(c, centre(c.width, width, margin), y, runs, small, gap)
         return c
 
     # No usable crest for one of the sides: the wide scoreline, but centred
@@ -230,7 +231,7 @@ def _live(c, fixture, crests, accent, small, show_tv, tag, show_rank,
     while len(runs) > 1 and _measure_runs(runs, small, gap) > room:
         runs.pop()
     width = _measure_runs(runs, small, gap)
-    _draw_runs(c, max(margin, (c.width - width) // 2), 23, runs, small, gap)
+    _draw_runs(c, centre(c.width, width, margin), 23, runs, small, gap)
     return c
 
 
@@ -341,7 +342,7 @@ def _result_crests(c, fixture, crests, accent, small, tag, show_rank=True,
 
     # One group: name, crests, result. Centred together, so the blank left
     # over lands at the two edges where it does some good.
-    x = max(margin, (c.width - (lead_w + block + trail_w)) // 2)
+    x = centre(c.width, lead_w + block + trail_w, margin)
     if label:
         c.text(x, top + (row - small.height) // 2, label, dim(accent, 0.75), small)
     x += lead_w
@@ -410,7 +411,7 @@ def _next(c, fixture, now, y, accent, small, show_tv, show_rank, tag,
         while len(runs) > 1 and _measure_runs(runs, small, gap) > room:
             runs.pop()
         width = label_w + _measure_runs(runs, small, gap)
-        left = max(margin, (c.width - width) // 2)
+        left = centre(c.width, width, margin)
         c.text(left, y, label, dim(accent, 0.8), small)
         _draw_runs(c, left + label_w, y, runs, small, gap)
         return
