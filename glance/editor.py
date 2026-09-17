@@ -53,6 +53,13 @@ details summary { cursor:pointer; color:#6a6a78; }
           border-radius:4px; margin-bottom:8px; background:#15151c; }
 .artrow img { image-rendering:pixelated; width:100%; background:#000; border:1px solid #2a2a34; }
 
+.remrow { display:grid; grid-template-columns:1fr 132px 58px 104px 52px 82px; gap:12px;
+           align-items:start; padding:9px; border:1px solid #26262e;
+           border-radius:4px; margin-bottom:8px; background:#15151c; }
+.remrow.done { opacity:.45; }
+.remrow input[type=date] { width:100%; box-sizing:border-box; }
+.remrow .overdue { color:#f77; }
+
 .lbl { color:#6a6a78; font-size:10px; text-transform:uppercase;
        letter-spacing:.07em; display:block; margin-bottom:2px; }
 .err { color:#f77; } .ok { color:#7f7; }
@@ -220,6 +227,66 @@ async function loadChannel(name) {
   render();
 }
 
+async function renderReminders() {
+  const data = await api("/api/reminders");
+  const host = document.getElementById("remlist");
+  if (!data.items.length) { host.innerHTML = "<p class='hint'>Nothing yet.</p>"; return; }
+  const today = new Date().toISOString().slice(0, 10);
+  host.innerHTML = data.items.map(r => {
+    const late = r.due && !r.done && r.due < today;
+    return `
+    <div class="remrow${r.done ? " done" : ""}">
+      <div><span class="lbl">text</span>
+        <input type="text" value="${esc(r.text)}" maxlength="${data.limits.text}"
+               data-rem="${esc(r.id)}" data-field="text"></div>
+      <div><span class="lbl${late ? " overdue" : ""}">${late ? "due &mdash; overdue" : "due"}</span>
+        <input type="date" value="${esc(r.due)}" data-rem="${esc(r.id)}" data-field="due"></div>
+      <div><span class="lbl">pri</span>
+        <input type="number" min="1" max="5" value="${r.priority}"
+               data-rem="${esc(r.id)}" data-field="priority"></div>
+      <div><span class="lbl">tag</span>
+        <input type="text" value="${esc(r.tag)}" maxlength="${data.limits.tag}"
+               data-rem="${esc(r.id)}" data-field="tag"></div>
+      <div><span class="lbl">done</span>
+        <input type="checkbox" ${r.done ? "checked" : ""}
+               data-rem="${esc(r.id)}" data-field="done"></div>
+      <div><span class="lbl">&nbsp;</span>
+        <button class="danger" data-remdel="${esc(r.id)}">delete</button></div>
+    </div>`;
+  }).join("");
+}
+
+document.addEventListener("change", async (ev) => {
+  const el = ev.target.closest("[data-rem]");
+  if (!el) return;
+  const field = el.dataset.field;
+  const value = field === "done" ? el.checked
+              : field === "priority" ? Number(el.value)
+              : el.value;
+  try {
+    await api("/api/reminders/" + encodeURIComponent(el.dataset.rem),
+              {method: "PUT", body: JSON.stringify({[field]: value})});
+    say("reminder saved", "ok");
+    // done and due change how the row is drawn, so redraw; a text edit would
+    // lose the caret for no reason.
+    if (field === "done" || field === "due") renderReminders();
+  } catch (e) {
+    say(e.message, "err");
+    renderReminders();          // put the refused value back to what is stored
+  }
+});
+
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-remdel]");
+  if (!b) return;
+  const row = b.closest(".remrow").querySelector("[data-field=text]");
+  if (!confirm("Delete " + (row ? row.value : "this reminder") + "?")) return;
+  try {
+    await api("/api/reminders/" + encodeURIComponent(b.dataset.remdel), {method: "DELETE"});
+    renderReminders();
+  } catch (e) { say(e.message, "err"); }
+});
+
 async function renderArt() {
   const data = await api("/api/art");
   const host = document.getElementById("artlist");
@@ -286,6 +353,26 @@ async function boot() {
     })});
     say("carousel settings saved", "ok");
   };
+  document.getElementById("remadd").onclick = async () => {
+    const text = document.getElementById("remtext");
+    const due = document.getElementById("remdue");
+    const pri = document.getElementById("rempri");
+    const tag = document.getElementById("remtag");
+    const el = document.getElementById("remstatus");
+    try {
+      await api("/api/reminders", {method: "POST", body: JSON.stringify({
+        text: text.value, due: due.value,
+        priority: Number(pri.value), tag: tag.value,
+      })});
+      text.value = ""; due.value = ""; tag.value = ""; pri.value = 3;
+      el.className = "ok"; el.textContent = "added";
+      renderReminders();
+    } catch (e) { el.className = "err"; el.textContent = e.message; }
+  };
+  document.getElementById("remtext").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") document.getElementById("remadd").click();
+  });
+
   document.getElementById("artupload").onclick = async () => {
     const input = document.getElementById("artfile");
     const el = document.getElementById("artstatus");
@@ -304,6 +391,7 @@ async function boot() {
   };
 
   await loadChannel(meta.channels[0]);
+  await renderReminders();
   await renderArt();
 }
 boot().catch(e => say("failed to load: " + e.message, "err"));
@@ -350,6 +438,23 @@ EDITOR_HTML = """<!doctype html><meta charset="utf-8">
 <p class="hint"><b>advance</b> steps on each fetch (respecting dwell).
  <b>clock</b> picks purely from wall-clock time. <b>min advance</b> stops a
  double fetch burning two slots.</p>
+
+<h2>Reminders</h2>
+<div class="bar">
+  <input type="text" id="remtext" placeholder="Something to remember" maxlength="120" style="flex:1;min-width:200px">
+  <input type="date" id="remdue">
+  <label class="lbl" style="margin:0">pri</label>
+  <input type="number" id="rempri" min="1" max="5" value="3">
+  <input type="text" id="remtag" placeholder="tag" maxlength="32" style="width:90px;flex:none">
+  <button id="remadd" class="primary">add</button>
+  <span id="remstatus"></span>
+</div>
+<p class="hint">Rows live in <code>data/reminders.json</code> and reach the panel
+ at the next refresh &mdash; no redeploy. Order is worked out for you: overdue
+ first, then by date, then priority, so <b>pri</b> is the only lever (1 is
+ highest). Ticking <b>done</b> takes a row off the panel but keeps it here.
+ Edits save as you leave each field.</p>
+<div id="remlist"></div>
 
 <h2>Artwork</h2>
 <div class="bar">

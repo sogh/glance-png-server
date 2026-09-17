@@ -151,6 +151,41 @@ to. Not the same as `/api/channels/{name}/reset`, which resets configuration.
 
 ---
 
+## Reminders
+
+Free-text rows in `data/reminders.json`, rendered by the `reminders` and
+`todos` scenes. `TodoSource` re-reads the file whenever its mtime changes, so
+a write here reaches the panel at the next refresh with no restart.
+
+Every write goes to a temp file and is then moved into place. A reader that
+caught a half-written file would parse it as broken and go on serving the last
+good list without saying so.
+
+### `GET /api/reminders`
+
+Every reminder, done ones included, plus the field limits the editor uses.
+An entry with no `id` is given one and the file is rewritten once, so ids stay
+put across reads and an edit addresses the row you meant.
+
+### `POST /api/reminders`
+
+Add one. `text` is required; `due` (`YYYY-MM-DD`), `priority` (1-5, 1 is
+highest), `done` and `tag` are optional. Text is capped at 120 characters and
+control characters are stripped. Bad input is refused with a message rather
+than silently coerced.
+
+### `PUT /api/reminders/{id}`
+
+Edit one. The body may be partial -- fields you leave out keep their stored
+values. An `id` in the body is ignored, so a request cannot reassign a row.
+
+### `DELETE /api/reminders/{id}`
+
+Remove one. Note that ticking `done` takes a row off the panel while keeping
+it in the file; delete is for when you want it gone.
+
+---
+
 ## Artwork
 
 ### `GET /api/art`

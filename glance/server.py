@@ -17,7 +17,7 @@ from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from . import artstore
+from . import artstore, todostore
 from .fonts import FONTS
 from .palette import NAMED
 from .sprites import SPRITES
@@ -90,6 +90,16 @@ def _png_response(body: bytes, label: str, extra: dict[str, str] | None = None) 
 
 class ChannelUpdate(BaseModel):
     entries: list[dict[str, Any]]
+
+
+class ReminderUpdate(BaseModel):
+    # Every field optional so a PUT can be partial; `text` being required is
+    # enforced in todostore, which keeps one source of truth for the message.
+    text: str | None = None
+    due: str | None = None
+    priority: int | None = None
+    done: bool | None = None
+    tag: str | None = None
 
 
 class CarouselUpdate(BaseModel):
@@ -298,6 +308,58 @@ def create_app(config_path: str | None = None) -> FastAPI:
         if not artstore.delete(glance.settings.static_dir, name):
             raise HTTPException(status_code=404, detail="no such file")
         return JSONResponse({"deleted": name})
+
+    # --- reminders ---------------------------------------------------------
+
+    def _reminders_path():
+        return glance.settings.todos_file
+
+    @api.get("/api/reminders")
+    def list_reminders(request: Request) -> JSONResponse:
+        require_token(request)
+        try:
+            items = todostore.listing(_reminders_path())
+        except todostore.TodoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse({
+            "items": items,
+            "path": str(_reminders_path()),
+            "limits": {"text": todostore.MAX_TEXT, "tag": todostore.MAX_TAG,
+                       "items": todostore.MAX_ITEMS,
+                       "priority": [todostore.MIN_PRIORITY, todostore.MAX_PRIORITY]},
+        }, headers={"Cache-Control": NO_CACHE})
+
+    @api.post("/api/reminders")
+    def add_reminder(body: ReminderUpdate, request: Request) -> JSONResponse:
+        require_token(request)
+        try:
+            item = todostore.add(_reminders_path(), body.model_dump(exclude_unset=True))
+        except todostore.TodoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse({"item": item})
+
+    @api.put("/api/reminders/{ident}")
+    def edit_reminder(ident: str, body: ReminderUpdate, request: Request) -> JSONResponse:
+        require_token(request)
+        try:
+            item = todostore.update(_reminders_path(), ident,
+                                    body.model_dump(exclude_unset=True))
+        except todostore.TodoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except KeyError:
+            raise HTTPException(status_code=404, detail="no such reminder") from None
+        return JSONResponse({"item": item})
+
+    @api.delete("/api/reminders/{ident}")
+    def delete_reminder(ident: str, request: Request) -> JSONResponse:
+        require_token(request)
+        try:
+            gone = todostore.remove(_reminders_path(), ident)
+        except todostore.TodoError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not gone:
+            raise HTTPException(status_code=404, detail="no such reminder")
+        return JSONResponse({"deleted": ident})
 
     @api.get("/edit", response_class=HTMLResponse)
     def edit(request: Request) -> HTMLResponse:

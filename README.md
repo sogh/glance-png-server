@@ -24,7 +24,8 @@ to put it. Python 3.10+, nine dependencies, no database, no build step. MIT.
   NCAA, the WPBL, Home Assistant, Instagram — all keyless where the API allows.
 - **Renders your own artwork**, and hand-authored bitmap fonts with real
   accents, so `el año` is the year and not something else.
-- **Edits in a browser** at `/edit`, without touching config or restarting.
+- **Edits in a browser** at `/edit`, without touching config or restarting —
+  channels, reminders and artwork.
 - **Fails visibly.** A broken source draws a card that says so, because a
   device that caches the last good image makes a silent failure invisible.
 
@@ -157,8 +158,8 @@ http://your-host:8080/edit
 
 Per entry: reorder with the arrows, toggle `enabled`, set `dwell`, mark an
 entry as `takeover`, and see a live thumbnail of what it renders. Below that,
-the carousel's own `mode`, clock `dwell` and `min advance`, and a file input
-for artwork.
+the carousel's own `mode`, clock `dwell` and `min advance`, a reminder list you
+can add to and edit in place, and a file input for artwork.
 
 **Every scene declares its parameters**, so the editor draws real controls —
 dropdowns listing the actual sprites, fonts, colours and calendars you have,
