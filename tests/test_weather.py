@@ -70,10 +70,29 @@ def test_a_malformed_payload_is_reported_not_raised(tmp_path: Path):
     assert src.last_error
 
 
-def test_labels_are_panel_sized():
-    for condition in set(WMO.values()):
-        w = Weather(60, 60, 70, 50, condition, True)
-        assert len(w.label) <= 13, f"{condition} label too long for the strip"
+def test_labels_fit_the_detail_column():
+    """The old guard counted characters. The panel bills in pixels.
+
+    "PARTLY SUNNY" is twelve characters, passed, and then rendered as
+    "PARTLY SUN..." on stock settings -- 45px of label in a 43px column.
+
+    The geometry below is the scene's, restated: change the layout and this
+    has to move with it, which is the point. The budget is a real number, not
+    a round one somebody guessed.
+    """
+    from glance.fonts import get_font
+    from glance.scenes.weather import FORECAST_COLUMN
+
+    small, big = get_font("3x5"), get_font("5x7")
+    right, left = 192 - 8, 8                      # 192px panel, 8px margins
+    temp_x = left + 22 + 5                        # icon, then a gap
+    detail_x = temp_x + big.measure("66\u00b0") * 2 + 7   # hero temp at scale 2
+    room = right - detail_x - (3 * FORECAST_COLUMN + 4)   # three forecast columns
+
+    for condition in sorted(set(WMO.values())):
+        label = Weather(60, 60, 70, 50, condition, True).label
+        assert small.measure(label) <= room, \
+            f"{label!r} is {small.measure(label)}px in a {room}px column"
 
 
 # --- the scene --------------------------------------------------------------
@@ -348,3 +367,156 @@ def test_a_forecast_column_that_will_not_fit_is_dropped(app, width):
            if c.image.getpixel((x, y)) != (0, 0, 0)]
     assert min(lit) >= 8, f"width {width}: ink at x={min(lit)}"
     assert max(lit) <= c.width - 8
+
+
+# --- the bugs the sweep across every condition turned up --------------------
+
+@pytest.mark.parametrize("size,y", [(12, 8), (22, 5)])
+def test_every_icon_stays_inside_its_box(size, y):
+    """The box is the forecast column's layout: weekday directly above, high
+    directly below. An icon that spills lands in the text.
+
+    `fog` dropped its bottom bar five rows past the box and struck through the
+    high; `partly` lifted its sun clear of the top and put three rows of rays
+    into the weekday, turning SUN into SUD. `thunder` and `clear` were a pixel
+    or two out in ways that happened not to collide yet.
+    """
+    from glance import weathericons as wi
+    from glance.canvas import Canvas
+
+    pad = 30
+    for condition in sorted(wi.ICONS):
+        for night in (False, True):
+            c = Canvas(size + 2 * pad)
+            c.clear("black")
+            wi.draw(c, condition, pad, y, size, night=night)
+            ink = [(x - pad, row) for x in range(c.width) for row in range(32)
+                   if c.image.getpixel((x, row)) != (0, 0, 0)]
+            when = f"{condition} at {size}px, {'night' if night else 'day'}"
+            assert ink, f"{when} drew nothing at all"
+            assert min(r for _, r in ink) >= y, f"{when} draws above its box"
+            assert max(r for _, r in ink) <= y + size - 1, f"{when} draws below its box"
+            assert min(col for col, _ in ink) >= 0, f"{when} draws left of its box"
+            assert max(col for col, _ in ink) <= size - 1, f"{when} draws right of its box"
+
+
+@pytest.mark.parametrize("condition", sorted(set(WMO.values())))
+def test_every_condition_clears_both_edges(app, condition):
+    """The margin test only ever ran `clear`, which was one of the two
+    conditions that passed. The other six hung a cloud pixel inside it."""
+    ctx = app.context(brightness=1.0)
+    ctx.weather = FakeSource(Weather(64, 62, 65, 52, condition, True, forecast=_days()))
+    c = REGISTRY["weather"].render(ctx, {"margin": 8})
+    lit = [x for x in range(c.width) for y in range(32)
+           if c.image.getpixel((x, y)) != (0, 0, 0)]
+    assert min(lit) >= 8, f"{condition}: ink at x={min(lit)}, inside the margin"
+    assert max(lit) <= c.width - 8, f"{condition}: ink at x={max(lit)}"
+
+
+def _icon_pixels(c, left=8, width=22):
+    return [c.image.getpixel((x, y)) for x in range(left, left + width) for y in range(32)]
+
+
+def test_a_partly_cloudy_night_is_not_sunny(app):
+    """`night` reached `clear` and nothing else, so 2am under a broken sky
+    drew full sunshine."""
+    day = render(app, Weather(60, 60, 70, 50, "partly", True))
+    night = render(app, Weather(60, 60, 70, 50, "partly", False))
+    assert day.to_ascii() != night.to_ascii()
+
+    def amber(pixels):
+        return [p for p in pixels if p[0] > 200 and p[1] > 120 and p[2] < 60]
+
+    assert amber(_icon_pixels(day)), "the sun should be out by day"
+    assert not amber(_icon_pixels(night)), "the sun is out at night"
+
+
+def test_the_moon_is_cut_with_the_panel_background(app):
+    """The crescent is a disc bitten by a second disc. That bite was a literal
+    black, so on any other background it read as a hole rather than a moon."""
+    c = render(app, Weather(48, 45, 55, 42, "clear", False), {"background": "indigo"})
+    assert (0, 0, 0) not in _icon_pixels(c), "the crescent was cut with black"
+
+
+def test_the_aqi_number_is_never_orphaned(app):
+    """The word and the number are one reading. Split across the fit check, a
+    tight line kept the grey "AQI" and dropped the number -- which is the part
+    that carries both the value and the colour of its band."""
+    tight = dict(precip_chance=100, forecast=_days())
+    with_aqi = render(app, Weather(-15, -22, 100, -20, "snow", True, aqi=201, **tight),
+                      {"feels": True})
+    without = render(app, Weather(-15, -22, 100, -20, "snow", True, aqi=None, **tight),
+                     {"feels": True})
+    assert with_aqi.to_ascii() == without.to_ascii(), \
+        "an AQI that does not fit must leave nothing behind"
+
+    # And the case is only meaningful if a roomy panel still draws it.
+    roomy = render(app, Weather(60, 60, 70, 50, "cloudy", True, aqi=201))
+    assert roomy.to_ascii() != render(app, Weather(60, 60, 70, 50, "cloudy", True)).to_ascii()
+
+
+def test_the_high_low_gives_up_words_rather_than_truncating():
+    from glance.fonts import get_font
+    from glance.scenes.weather import _high_low
+
+    small = get_font("3x5")
+    assert _high_low(70, 52, 60, small) == "H 70  L 52"       # room for the lot
+    for room in range(4, 61):
+        line = _high_low(100, -20, room, small)
+        assert "\u2026" not in line, f"truncated at room={room}"
+        assert small.measure(line) <= room, f"overran room={room}"
+        if line:
+            assert "100" in line, "the high is the last thing to go"
+    assert _high_low(100, -20, 4, small) == "", "nothing fits, so draw nothing"
+
+
+def test_a_trace_of_rain_does_not_report_none(app):
+    """`.00IN` claims rain and reports none in the same breath."""
+    trace = Weather(60, 60, 70, 50, "rain", True, precip_chance=20, precip_now=0.004)
+    assert trace.precip_text == "20%"
+    assert Weather(60, 60, 70, 50, "rain", True, precip_now=0.04).precip_text == ".04IN"
+
+
+def test_an_empty_daily_block_keeps_the_current_temperature(tmp_path: Path):
+    """The key can be present with an empty list behind it. Indexing that threw
+    away a perfectly good current reading and blanked the whole panel."""
+    src = WeatherSource(45.5, -122.7, tmp_path, refresh=99999)
+    src.cache_file.write_text(json.dumps({
+        "current": {"temperature_2m": 66.1, "weather_code": 3, "is_day": 1},
+        "daily": {"temperature_2m_max": [], "temperature_2m_min": []},
+    }))
+    w = src.current()
+    assert w is not None, "a bad daily block must not cost us the temperature"
+    assert w.temperature == 66
+    assert w.high == 66 and w.low == 66
+
+
+def test_air_quality_is_not_refetched_on_the_forecast_clock(primed, monkeypatch):
+    """Caching it separately was the whole point; giving it the forecast's own
+    15-minute interval meant four calls per hourly reading."""
+    import os
+    import time as time_mod
+
+    from glance.sources import weather as weather_mod
+
+    assert primed.air_refresh == 3600
+    primed.air_cache_file.write_text(json.dumps({"current": {"us_aqi": 42}}))
+    stamp = time_mod.time() - 1200        # 20 min: past `refresh`, inside the hour
+    os.utime(primed.air_cache_file, (stamp, stamp))
+
+    def boom(*args, **kwargs):
+        raise AssertionError("refetched hourly data on the 15-minute clock")
+
+    monkeypatch.setattr(weather_mod.httpx, "get", boom)
+    assert (primed._air() or {}).get("current", {}).get("us_aqi") == 42
+
+
+def test_the_weather_is_built_once_per_frame(primed, monkeypatch):
+    """`current()` is called to decide the scene is in the rotation and again
+    to draw it, and each call re-read and re-parsed two cache files."""
+    calls = []
+    original = primed._payload
+    monkeypatch.setattr(primed, "_payload", lambda: calls.append(1) or original())
+    assert primed.current() is not None
+    assert primed.current() is not None
+    assert len(calls) == 1

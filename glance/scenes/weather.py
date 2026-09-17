@@ -25,6 +25,22 @@ def _temp_color(value: float, default: str = "white") -> str:
     return default
 
 
+def _high_low(high: float, low: float, room: int, font) -> str:
+    """The widest high/low that fits `room`, or "" if even the high will not.
+
+    It gives up the spacing first, then the low itself. Truncation is not one
+    of the options: an ellipsis where a temperature should be says less than
+    no low at all, and the worst case -- a three-digit high beside a negative
+    low, drawn as "H 100  L -.." -- is a real winter reading, not a contrived
+    one.
+    """
+    for line in (f"H {high:.0f}  L {low:.0f}", f"H {high:.0f} L {low:.0f}",
+                 f"{high:.0f}/{low:.0f}", f"H {high:.0f}"):
+        if font.measure(line) <= room:
+            return line
+    return ""
+
+
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
     if params.get("always"):
         return True
@@ -50,7 +66,8 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
           ])
 def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
-    c.clear(params.get("background", "black"))
+    background = params.get("background", "black")
+    c.clear(background)
 
     source = ctx.weather
     current = source.current() if source else None
@@ -73,7 +90,7 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 
     # Icon, then the temperature, then the detail column.
     draw_icon(c, current.condition, left, (c.height - icon_size) // 2,
-              icon_size, night=not current.is_day)
+              icon_size, night=not current.is_day, background=background)
 
     temp = f"{current.temperature:.0f}°"
     temp_x = left + icon_size + 5
@@ -108,37 +125,42 @@ def render_weather(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 
     c.text(detail_x, 4, current.label, dim(params.get("accent", "amber"), 0.95),
            small, max_width=room)
-    c.text(detail_x, 13, f"H {current.high:.0f}  L {current.low:.0f}",
-           "grey", small, max_width=room)
+    high_low = _high_low(current.high, current.low, room, small)
+    if high_low:
+        c.text(detail_x, 13, high_low, "grey", small)
 
-    # Third line packs in whatever fits, left to right, dropping anything that
-    # would overflow rather than truncating it into nonsense.
-    segments: list[tuple[str, Any]] = []
+    # Third line packs in whatever fits, left to right, dropping any reading
+    # that would overflow rather than truncating it into nonsense. A reading
+    # goes down whole or not at all, which is why each is a list: "AQI" and
+    # its number are one reading, not two. Placed separately, a tight line
+    # would take the word and drop the number -- leaving a bare grey "AQI"
+    # standing for nothing, with the colour that carries the band gone.
+    readings: list[list[tuple[str, Any]]] = []
     if bool(params.get("precip", True)) and current.precip_text:
-        segments.append((current.precip_text, "sky"))
+        readings.append([(current.precip_text, "sky")])
     if bool(params.get("aqi", True)) and current.aqi is not None:
         # The number carries the colour: an AQI means nothing unless you
         # already know the bands, and the colour is the band.
-        segments.append(("AQI", dim("grey", 0.9)))
-        segments.append((f"{current.aqi:.0f}", current.aqi_band[1]))
+        readings.append([("AQI", dim("grey", 0.9)),
+                         (f"{current.aqi:.0f}", current.aqi_band[1])])
     if (bool(params.get("feels", False))
             and abs(current.feels_like - current.temperature) >= 2):
-        segments.append((f"FEELS {current.feels_like:.0f}", dim("grey", 0.8)))
+        readings.append([(f"FEELS {current.feels_like:.0f}", dim("grey", 0.8))])
 
     limit = detail_x + room
     x = detail_x
-    for index, (text, color) in enumerate(segments):
-        # "AQI" and its number belong together -- the number carries the band
-        # colour and the word alone means nothing -- so they get a hair of
-        # space rather than the full gap between separate readings.
-        joined = bool(index) and segments[index - 1][0] == "AQI"
-        gap = 2 if joined else 4
-        width = small.measure(text)
-        if x + gap + width > limit:
-            break
-        x += gap if index else 0
-        c.text(x, 22, text, color, small)
-        x += width
+    for reading in readings:
+        # Words within a reading get a hair of space; separate readings get
+        # the full gap, and nothing is owed before the first one.
+        width = sum(small.measure(t) for t, _ in reading) + 2 * (len(reading) - 1)
+        lead = 4 if x > detail_x else 0
+        if x + lead + width > limit:
+            continue          # a shorter reading further along may still fit
+        x += lead
+        for index, (text, color) in enumerate(reading):
+            x += 2 if index else 0
+            c.text(x, 22, text, color, small)
+            x += small.measure(text)
     return c
 
 
@@ -159,7 +181,8 @@ def _draw_forecast(c: Canvas, days, x0: int, small, params: dict[str, Any]) -> N
         except ValueError:
             label = "?"
         c.text(mid, 1, label, dim("grey", 0.9), small, "center", FORECAST_COLUMN - 1)
-        draw_icon(c, day.condition, x + (FORECAST_COLUMN - 12) // 2, 8, 12)
+        draw_icon(c, day.condition, x + (FORECAST_COLUMN - 12) // 2, 8, 12,
+                  background=params.get("background", "black"))
         c.text(mid, 22, f"{day.high:.0f}", _temp_color(day.high, "white"),
                small, "center", FORECAST_COLUMN - 1)
 
