@@ -300,3 +300,68 @@ def test_no_deck_says_so_rather_than_drawing_a_blank(app, tmp_path):
     assert not scene.available(ctx, {"language": "es"})
     c = scene.render(ctx, {"language": "es"})
     assert c.image.get_flattened_data().count((0, 0, 0)) < 192 * 32
+
+
+# --- placement --------------------------------------------------------------
+
+def every_card(app, books, count=40):
+    """Walk the deck a slot at a time, yielding (entry, canvas)."""
+    scene = REGISTRY["language"]
+    for i in range(count):
+        when = NOW + timedelta(seconds=900 * i)
+        ctx = app.context(when, brightness=1.0)
+        ctx.vocabulary = books
+        for code in books.languages:
+            entry = books.get(code).at(when, 900, True)
+            yield entry, scene.render(ctx, {"language": code, "label": True})
+
+
+def test_no_card_touches_the_edges(app):
+    """See layout.py. The language tag used to sit at x=2, which put every
+    card in both decks over the line."""
+    from glance.layout import MARGIN
+    books = Vocabulary(SHIPPED)
+    for entry, canvas in every_card(app, books):
+        lit = [x for x in range(canvas.width) for y in range(canvas.height)
+               if canvas.image.getpixel((x, y)) != (0, 0, 0)]
+        assert min(lit) >= MARGIN, f"{entry.term!r} reaches x={min(lit)}"
+        assert max(lit) <= canvas.width - MARGIN, f"{entry.term!r}"
+
+
+def test_nothing_is_truncated_to_make_room(app):
+    """The margin is a floor on the layout, not licence to cut the words.
+
+    Narrowing the room shadowed a variable and every gloss came out clipped to
+    26px -- "THE APPLE" as "THE AP.." -- while still passing a margin check,
+    because truncated text respects margins beautifully.
+    """
+    font = get_font("3x5")
+    books = Vocabulary(SHIPPED)
+    for entry, canvas in every_card(app, books):
+        drawn = canvas.to_ascii()
+        assert "…" not in drawn and ".." not in entry.gloss
+        # The gloss is drawn whole: its full width fits in what it was given.
+        assert font.measure(entry.gloss) <= canvas.width - 2 * 8, entry.gloss
+
+
+def test_the_article_and_the_word_are_centred_together(app, tmp_path):
+    """Not the word centred with the article hung off its left edge."""
+    ctx = ctx_with(app, tmp_path, "- la granja = the farm\n")
+    scene = REGISTRY["language"]
+    apart = scene.render(ctx, {"language": "es", "article_color": "amber"})
+    lit = [x for x in range(apart.width) for y in range(apart.height)
+           if apart.image.getpixel((x, y)) != (0, 0, 0)]
+    left, right = min(lit), apart.width - 1 - max(lit)
+    assert abs(left - right) <= 4, f"gutters {left} vs {right}"
+
+
+def test_the_margin_is_adjustable(app, tmp_path):
+    ctx = ctx_with(app, tmp_path, "- hola = hello\n")
+    scene = REGISTRY["language"]
+    edges = {}
+    for margin in (0, 24):
+        c = scene.render(ctx, {"language": "es", "label": True, "margin": margin})
+        lit = [x for x in range(c.width) for y in range(c.height)
+               if c.image.getpixel((x, y)) != (0, 0, 0)]
+        edges[margin] = min(lit)
+    assert edges[24] > edges[0]

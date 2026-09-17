@@ -19,6 +19,7 @@ from typing import Any
 from ..canvas import Canvas
 from ..fonts import get_font
 from ..layout import centre
+from ..layout import MARGIN, centre
 from ..palette import dim
 from .base import Param, RenderContext, register
 
@@ -66,12 +67,21 @@ def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
                     help="Optional second article colour, for feminine nouns"),
               Param("note", "bool", True, help="Show the pronunciation hint"),
               Param("label", "bool", False, help="Name the language"),
+              Param("margin", "number", MARGIN, minimum=0, maximum=40,
+                    help="Blank kept at each edge, so the pane separates from "
+                         "its neighbours as the device pans past"),
               Param("background", "color", "black", options="@colors"),
           ])
 def render_language(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     c = ctx.canvas()
     c.clear(params.get("background", "black"))
     small, big = get_font("3x5"), get_font("5x7")
+
+    # See layout.py: content is centred inside a margin, and that includes
+    # the language tag. Pinned at x=2 it was the one thing on the card
+    # touching the edge, which put every card in the deck over the line.
+    margin = max(0, int(params.get("margin", MARGIN) or 0))
+    room = c.width - 2 * margin
 
     deck = _deck(ctx, params)
     if deck is None or not len(deck):
@@ -91,45 +101,49 @@ def render_language(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
 
     top = 0
     if bool(params.get("label", False)):
-        c.text(2, 0, deck.label[:12], dim("amber", 0.6), small)
+        c.text(margin, 0, deck.label[:12], dim("amber", 0.6), small)
         top = small.height + 1
 
     note = entry.note if bool(params.get("note", True)) else ""
     # The note only earns its row if the term and gloss have already had
     # theirs; a squeezed three-line card reads worse than a clear two-line one.
     lines = 2 + (1 if note else 0)
-    room = c.height - top
-    scale = 2 if (big.measure(entry.term) * 2 <= c.width - 6
-                  and room >= 14 + 2 + small.height + (small.height + 1 if note else 0)) else 1
+    # `room` is horizontal and `headroom` vertical. They were both called
+    # room for a moment, and the vertical one won -- which truncated every
+    # gloss to 26 pixels while still, technically, respecting the margin.
+    headroom = c.height - top
+    scale = 2 if (big.measure(entry.term) * 2 <= room
+                  and headroom >= 14 + 2 + small.height
+                  + (small.height + 1 if note else 0)) else 1
 
     term_h = big.height * scale
     block = term_h + 2 + small.height + ((small.height + 1) if note else 0)
-    y = top + max(0, (room - block) // 2)
+    y = top + max(0, (headroom - block) // 2)
 
-    _term(c, entry, y, big, scale, params)
+    _term(c, entry, y, big, scale, params, margin)
     y += term_h + 2
 
     if shown:
         c.text(c.width // 2, y, entry.gloss, params.get("gloss_color", "sky"),
-               small, "center", c.width - 4)
+               small, "center", room)
     else:
         # A blank half-card looks like a failed render, so say what it is.
         c.text(c.width // 2, y, "?", dim("grey", 0.6), small, "center")
     y += small.height + 1
 
     if note and y + small.height <= c.height:
-        c.text(c.width // 2, y, note, dim("grey", 0.7), small, "center",
-               c.width - 4)
+        c.text(c.width // 2, y, note, dim("grey", 0.7), small, "center", room)
     return c
 
 
-def _term(c: Canvas, entry, y: int, font, scale: int, params: dict[str, Any]) -> None:
+def _term(c: Canvas, entry, y: int, font, scale: int, params: dict[str, Any],
+          margin: int = MARGIN) -> None:
     """The term, with its article in a colour of its own."""
     colour = params.get("color", "white")
+    room = c.width - 2 * margin
     article = entry.article
     if not article:
-        c.text(c.width // 2, y, entry.term, colour, font, "center",
-               c.width - 4, scale)
+        c.text(c.width // 2, y, entry.term, colour, font, "center", room, scale)
         return
 
     feminine = params.get("feminine_color")

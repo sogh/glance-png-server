@@ -248,6 +248,7 @@ A word or phrase in another language, and what it means
 | `feminine_color` | color | — | Optional second article colour, for feminine nouns. One of: any palette colour or `#rrggbb`. |
 | `note` | bool | `true` | Show the pronunciation hint. |
 | `label` | bool | `false` | Name the language. |
+| `margin` | number | `8` | Blank kept at each edge, so the pane separates from its neighbours as the device pans past. (min 0, max 40) |
 | `background` | color | `black` | One of: any palette colour or `#rrggbb`. |
 
 ### `panels`
