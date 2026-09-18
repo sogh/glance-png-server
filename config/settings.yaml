@@ -124,6 +124,8 @@ sources:
     units: fahrenheit         # or celsius
     refresh: 900
     air_quality: true         # a second call, to a different Open-Meteo host
+    air_refresh: 3600         # AQI is published hourly; polling it on the
+                              # 15-minute forecast clock only wastes calls
 
     # Where the AQI comes from. EPA AirNow publishes what monitors actually
     # measured; Open-Meteo derives it from an atmospheric model on a coarse

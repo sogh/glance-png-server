@@ -62,8 +62,13 @@ WMO = {
     95: "thunder", 96: "thunder", 99: "thunder",
 }
 
+# Kept short enough to fit the detail column at its narrowest, which is what
+# the panel actually affords -- see test_labels_fit_the_detail_column. The old
+# "PARTLY SUNNY" was 45px against a 43px budget on stock settings, so the most
+# common daytime sky on the panel rendered as "PARTLY SUN...". It was also
+# wrong twice a day: this label is shown at night too.
 LABELS = {
-    "clear": "CLEAR", "partly": "PARTLY SUNNY", "cloudy": "CLOUDY",
+    "clear": "CLEAR", "partly": "PARTLY", "cloudy": "CLOUDY",
     "fog": "FOG", "drizzle": "DRIZZLE", "rain": "RAIN",
     "snow": "SNOW", "thunder": "STORMS",
 }
@@ -107,7 +112,10 @@ class Weather:
     def precip_text(self) -> str:
         """What is actually falling beats what might: if it is raining now,
         show the amount rather than a probability that has been overtaken."""
-        if self.precip_now > 0:
+        # Below half a hundredth there is nothing to print: ".00IN" claims
+        # rain and reports none in the same breath. Fall through to the
+        # chance, which at least says something true.
+        if self.precip_now >= 0.005:
             return f"{self.precip_now:.2f}IN".lstrip("0")
         if self.precip_chance is not None:
             return f"{self.precip_chance:.0f}%"
@@ -117,7 +125,8 @@ class Weather:
 class WeatherSource:
     def __init__(self, latitude: float | None, longitude: float | None,
                  cache_dir: Path, units: str = "fahrenheit",
-                 refresh: int = 900, timeout: float = 10.0,
+                 refresh: int = 900, air_refresh: int = 3600,
+                 timeout: float = 10.0,
                  tz: ZoneInfo | None = None, air_source: Any = None) -> None:
         # Open-Meteo is asked for timezone=auto, so sunrise and sunset arrive
         # as naive local times and need a zone attached to be comparable with
@@ -127,6 +136,11 @@ class WeatherSource:
         self.longitude = longitude
         self.units = units
         self.refresh = refresh
+        # Air quality is published hourly, which is the whole reason it is
+        # cached apart from the forecast. It was then given the forecast's own
+        # 15-minute clock, so the separate cache bought nothing and the second
+        # endpoint was polled four times per new reading.
+        self.air_refresh = air_refresh
         self.timeout = timeout
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +152,12 @@ class WeatherSource:
         self.air_source = air_source
         self.last_error: str | None = None
         self._lock = threading.Lock()
+        # `current()` runs twice per frame -- once to decide whether the scene
+        # is in the rotation, once to draw it -- and each run re-reads and
+        # re-parses two cache files. Holding the built value for a moment
+        # collapses that pair. The window is far shorter than any refresh
+        # interval, so it can never mask a fetch.
+        self._memo: tuple[float, Weather | None] | None = None
 
     @property
     def configured(self) -> bool:
@@ -195,7 +215,7 @@ class WeatherSource:
         try:
             age = (time.time() - self.air_cache_file.stat().st_mtime
                    if self.air_cache_file.exists() else float("inf"))
-            if age < self.refresh:
+            if age < self.air_refresh:
                 return json.loads(self.air_cache_file.read_text())
             resp = httpx.get(AIR_ENDPOINT, timeout=self.timeout, params={
                 "latitude": self.latitude, "longitude": self.longitude,
@@ -213,7 +233,16 @@ class WeatherSource:
                     return None
             return None
 
+    MEMO_SECONDS = 2.0
+
     def current(self) -> Weather | None:
+        if self._memo is not None and time.monotonic() - self._memo[0] < self.MEMO_SECONDS:
+            return self._memo[1]
+        value = self._build()
+        self._memo = (time.monotonic(), value)
+        return value
+
+    def _build(self) -> Weather | None:
         data = self._payload()
         if not data:
             return None
@@ -245,6 +274,19 @@ class WeatherSource:
                 except (ValueError, TypeError):
                     return None
 
+            def first(key: str, fallback: float) -> float:
+                """Today's value from the daily block, or the fallback.
+
+                `daily` can carry a key with an empty list behind it, and
+                indexing that raised straight past a perfectly good current
+                temperature and blanked the whole panel.
+                """
+                values = daily.get(key) or []
+                try:
+                    return float(values[0])
+                except (IndexError, TypeError, ValueError):
+                    return float(fallback)
+
             days: list[DayForecast] = []
             times = daily.get("time") or []
             codes = daily.get("weather_code") or []
@@ -261,8 +303,8 @@ class WeatherSource:
             return Weather(
                 temperature=round(float(cur["temperature_2m"])),
                 feels_like=round(float(cur.get("apparent_temperature", cur["temperature_2m"]))),
-                high=round(float(daily.get("temperature_2m_max", [cur["temperature_2m"]])[0])),
-                low=round(float(daily.get("temperature_2m_min", [cur["temperature_2m"]])[0])),
+                high=round(first("temperature_2m_max", cur["temperature_2m"])),
+                low=round(first("temperature_2m_min", cur["temperature_2m"])),
                 condition=WMO.get(int(cur.get("weather_code", 0)), "cloudy"),
                 is_day=bool(cur.get("is_day", 1)),
                 unit="C" if self.units.startswith("c") else "F",
