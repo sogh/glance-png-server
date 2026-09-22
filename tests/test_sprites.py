@@ -63,8 +63,8 @@ def test_the_pumpkin_has_a_green_stem_over_an_orange_body():
 
 
 def test_the_pumpkin_has_ridges():
-    """Without the darker columns this is an orange ball with a stem -- at
-    13px across there is no other cue that it is a pumpkin."""
+    """Without the darker columns this is an orange ball with a stem, and at
+    this size there is no other cue that it is a pumpkin."""
     sprite = get_sprite("pumpkin")
     middle = sprite.rows[sprite.height // 2]
     assert len({ch for ch in middle if ch != "."}) > 1

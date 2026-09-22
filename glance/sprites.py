@@ -161,24 +161,38 @@ LEAF_SPECK = Sprite(
 # A pumpkin, not a jack-o'-lantern -- it earns its place on a harvest panel as
 # well as a Halloween one.
 #
-# The ridges are what make it read. Without the two darker columns this is an
-# orange ball with a stem, and at 13px across there is no other cue: no
-# highlight survives, no outline fits. Three lobes is the fewest that still
-# says "pumpkin", and the body is wider than it is tall, which is the other
-# half of the silhouette.
+# The ridges are what make it read. Without the darker columns this is an
+# orange ball with a stem, and there is no other cue at this size: no specular
+# highlight survives, no outline fits. Five lobes, graduated 3-4-7-4-3 so the
+# middle one faces you and the outer pair fall away, and the body stays wider
+# than it is tall -- that is the rest of the silhouette.
+#
+# Body is an ellipse 25 across by 16 high, with the ridges laid on at 0.35 and
+# 0.78 of each row's half-width so they converge toward the poles the way they
+# do on a real one. Computed rather than placed by hand, for the same reason
+# the web is: curves wobble when you type them.
 PUMPKIN = Sprite(
     rows=(
-        "......s......",   # stem, leaning the way they grow
-        ".....ss......",
-        "..#=#####=#..",
-        ".##=#####=##.",
-        "###=#####=###",
-        "###=#####=###",
-        "###=#####=###",
-        "###=#####=###",
-        "###=#####=###",
-        ".##=#####=##.",
-        "..#=#####=#..",
+        "..............ss.........",
+        ".............sss.........",
+        "............sss..........",
+        "...........ssss..........",
+        "........#########........",
+        ".....##=##=###=##=##.....",
+        "...##=###=#####=###=##...",
+        "..##=###=#######=###=##..",
+        ".##=####=#######=####=##.",
+        "###=####=#######=####=###",
+        "###=####=#######=####=###",
+        "###=####=#######=####=###",
+        "###=####=#######=####=###",
+        "###=####=#######=####=###",
+        "###=####=#######=####=###",
+        ".##=####=#######=####=##.",
+        "..##=###=#######=###=##..",
+        "...##=###=#####=###=##...",
+        ".....##=##=###=##=##.....",
+        "........#########........",
     ),
     palette={
         "#": "#ef7d1a",     # flesh
@@ -192,19 +206,35 @@ PUMPKIN = Sprite(
 # point. Getting the order backwards is the usual mistake and it stops looking
 # like candy corn immediately.
 #
-# The base is rounded off at the last row. Left square it reads as a traffic
-# cone, which is the same three-banded cone shape without the softness.
+# The base is rounded off over the last two rows. Left square it reads as a
+# traffic cone -- the same three-banded shape without the softness.
 CANDY_CORN = Sprite(
     rows=(
-        "...w...",
-        "..www..",
-        "..www..",
-        ".ooooo.",
-        ".ooooo.",
-        ".ooooo.",
-        "yyyyyyy",
-        "yyyyyyy",
-        ".yyyyy.",
+        ".......w.......",
+        "......www......",
+        "......www......",
+        ".....wwwww.....",
+        ".....wwwww.....",
+        "....wwwwwww....",
+        "....wwwwwww....",
+        "....ooooooo....",
+        "...ooooooooo...",
+        "...ooooooooo...",
+        "...ooooooooo...",
+        "..ooooooooooo..",
+        "..ooooooooooo..",
+        "..ooooooooooo..",
+        ".ooooooooooooo.",
+        ".ooooooooooooo.",
+        ".yyyyyyyyyyyyy.",
+        ".yyyyyyyyyyyyy.",
+        "yyyyyyyyyyyyyyy",
+        "yyyyyyyyyyyyyyy",
+        "yyyyyyyyyyyyyyy",
+        "yyyyyyyyyyyyyyy",
+        "yyyyyyyyyyyyyyy",
+        ".yyyyyyyyyyyyy.",
+        "...yyyyyyyyy...",
     ),
     palette={
         "w": "#f4f1e6",     # cream rather than white; pure white glares here
