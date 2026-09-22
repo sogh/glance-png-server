@@ -54,6 +54,33 @@ def test_the_sweatpants_are_grey():
     assert all(max(p) - min(p) < 20 for p in lit)
 
 
+def test_the_pumpkin_has_a_green_stem_over_an_orange_body():
+    sprite = get_sprite("pumpkin")
+    lit = lambda row: next(sprite.color_for(ch) for ch in sprite.rows[row] if ch != ".")
+    stem, body = lit(0), lit(sprite.height // 2)
+    assert stem[1] > stem[0] and stem[1] > stem[2], "the stem should be green"
+    assert body[0] > body[1] > body[2], "the body should be orange"
+
+
+def test_the_pumpkin_has_ridges():
+    """Without the darker columns this is an orange ball with a stem -- at
+    13px across there is no other cue that it is a pumpkin."""
+    sprite = get_sprite("pumpkin")
+    middle = sprite.rows[sprite.height // 2]
+    assert len({ch for ch in middle if ch != "."}) > 1
+
+
+def test_candy_corn_is_banded_in_the_right_order():
+    """White tip, orange middle, yellow base, from the point down. Backwards
+    is the usual mistake and it stops reading as candy corn at once."""
+    sprite = get_sprite("candycorn")
+    lit = lambda row: next(sprite.color_for(ch) for ch in sprite.rows[row] if ch != ".")
+    tip, middle, base = lit(0), lit(sprite.height // 2), lit(sprite.height - 1)
+    assert max(tip) - min(tip) < 20, "the tip is cream, not a colour"
+    assert middle[1] < base[1], "the base must be yellower than the middle"
+    assert middle[2] < 80 and base[2] < 120, "both lower bands stay warm"
+
+
 def test_scale_multiplies_cleanly():
     sprite = get_sprite("sweatpants")
     c1, c2 = Canvas(192), Canvas(192)

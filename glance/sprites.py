@@ -158,12 +158,70 @@ LEAF_SPECK = Sprite(
 )
 
 
+# A pumpkin, not a jack-o'-lantern -- it earns its place on a harvest panel as
+# well as a Halloween one.
+#
+# The ridges are what make it read. Without the two darker columns this is an
+# orange ball with a stem, and at 13px across there is no other cue: no
+# highlight survives, no outline fits. Three lobes is the fewest that still
+# says "pumpkin", and the body is wider than it is tall, which is the other
+# half of the silhouette.
+PUMPKIN = Sprite(
+    rows=(
+        "......s......",   # stem, leaning the way they grow
+        ".....ss......",
+        "..#=#####=#..",
+        ".##=#####=##.",
+        "###=#####=###",
+        "###=#####=###",
+        "###=#####=###",
+        "###=#####=###",
+        "###=#####=###",
+        ".##=#####=##.",
+        "..#=#####=#..",
+    ),
+    palette={
+        "#": "#ef7d1a",     # flesh
+        "=": "#b4500f",     # the ridges between the lobes
+        "s": "#5d7c34",     # stem
+    },
+)
+
+
+# Candy corn: white tip, orange middle, yellow base, in that order from the
+# point. Getting the order backwards is the usual mistake and it stops looking
+# like candy corn immediately.
+#
+# The base is rounded off at the last row. Left square it reads as a traffic
+# cone, which is the same three-banded cone shape without the softness.
+CANDY_CORN = Sprite(
+    rows=(
+        "...w...",
+        "..www..",
+        "..www..",
+        ".ooooo.",
+        ".ooooo.",
+        ".ooooo.",
+        "yyyyyyy",
+        "yyyyyyy",
+        ".yyyyy.",
+    ),
+    palette={
+        "w": "#f4f1e6",     # cream rather than white; pure white glares here
+        "o": "#f28c1c",
+        "y": "#f6cf3e",
+    },
+)
+
+
 SPRITES: dict[str, Sprite] = {
     "sweatpants": SWEATPANTS,
     "spiderweb": SPIDERWEB,
     "maple": MAPLE_LEAF,
     "oak": OAK_LEAF,
     "leaf": LEAF_SPECK,
+    "pumpkin": PUMPKIN,
+    "candycorn": CANDY_CORN,
 }
 
 
