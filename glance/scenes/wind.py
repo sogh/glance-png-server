@@ -23,6 +23,7 @@ from ..layout import MARGIN, fits, row
 from .base import Param, RenderContext, register
 
 COMPASS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+GUSTS = "GUSTS"
 
 # Beaufort, collapsed to the six steps that are worth telling apart on a
 # 32px panel. The ceiling is the top of the band, in mph.
@@ -121,7 +122,7 @@ def render_wind(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     gust = ""
     if (bool(params.get("gusts", True)) and current.gusts is not None
             and current.gusts - current.wind >= 5):
-        gust = f"G{current.gusts:.0f}"
+        gust = f"{current.gusts:.0f}"
 
     # Three blocks: the graphic, the reading, and the detail beside it. Each
     # is measured before anything is drawn, so the row can be centred as one
@@ -130,7 +131,8 @@ def render_wind(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
     icon_w = max(lengths)
     speed_w = big.measure(speed) * 2 + 3 + small.measure(unit)
     band_w = small.measure(name) if bool(params.get("band", True)) else 0
-    detail_w = max(small.measure(point), small.measure(gust)) if (point or gust) else 0
+    gust_w = (small.measure(GUSTS) + 2 + small.measure(gust)) if gust else 0
+    detail_w = max(small.measure(point), gust_w) if (point or gust) else 0
 
     # Shed rather than cross the margin. On a single 64px module all three
     # blocks cannot stand, so the detail goes first, then the graphic, then
@@ -165,5 +167,9 @@ def render_wind(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
         if point:
             c.text(x, 9, point, "white", small)
         if gust:
-            c.text(x, 18, gust, "amber", small)
+            # Set like the AQI on the weather panel: the word in grey, the
+            # number carrying the colour. "G30" saved sixteen pixels and cost
+            # anyone who had not already learned what the G meant.
+            c.text(x, 18, GUSTS, "grey", small)
+            c.text(x + small.measure(GUSTS) + 2, 18, gust, "amber", small)
     return c
