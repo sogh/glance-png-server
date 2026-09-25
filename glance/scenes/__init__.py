@@ -2,7 +2,8 @@
 
 from . import (activity, agenda, banner, baseball, basic, columns,  # noqa: F401
                entities, holiday, instagram, language, pulse, rankings,
-               scores, sky, sprite, static_image, todos, weather)
+               scores, sky, sprite, static_image, todos, weather,
+                   wind)
 from .base import (  # noqa: F401
     REGISTRY,
     FunctionScene,

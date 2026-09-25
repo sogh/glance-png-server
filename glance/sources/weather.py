@@ -74,6 +74,18 @@ LABELS = {
 }
 
 
+def _maybe_float(value: object) -> float | None:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _maybe_int(value: object) -> int | None:
+    v = _maybe_float(value)
+    return None if v is None else int(round(v))
+
+
 @dataclass
 class DayForecast:
     date: str                 # ISO, so the scene can label it however it likes
@@ -95,6 +107,10 @@ class Weather:
     precip_now: float = 0.0               # falling right now, inches
     sunrise: datetime | None = None
     sunset: datetime | None = None
+    wind: float | None = None             # sustained, in the configured unit
+    gusts: float | None = None            # peak gust
+    wind_dir: int | None = None           # degrees the wind is coming FROM
+    wind_unit: str = "mph"
     aqi: int | None = None                # US AQI
     aqi_source: str = ""                  # "airnow" (measured) | "open-meteo" (modelled)
     aqi_station: str = ""
@@ -182,10 +198,14 @@ class WeatherSource:
                     "latitude": self.latitude,
                     "longitude": self.longitude,
                     "current": "temperature_2m,apparent_temperature,weather_code,"
-                               "is_day,precipitation",
+                               "is_day,precipitation,wind_speed_10m,"
+                               "wind_gusts_10m,wind_direction_10m",
                     "daily": "temperature_2m_max,temperature_2m_min,weather_code,"
                              "precipitation_probability_max,sunrise,sunset",
                     "temperature_unit": self.units,
+                    # Follow the temperature unit rather than adding a knob:
+                    # somebody reading degrees F wants mph, not km/h.
+                    "wind_speed_unit": "kmh" if self.units.startswith("c") else "mph",
                     "precipitation_unit": "inch",
                     "timezone": "auto",
                     # Today plus three: the strip has room for three columns.
@@ -310,6 +330,10 @@ class WeatherSource:
                 unit="C" if self.units.startswith("c") else "F",
                 precip_chance=None if chance is None else round(float(chance)),
                 precip_now=float(cur.get("precipitation", 0) or 0),
+                wind=_maybe_float(cur.get("wind_speed_10m")),
+                gusts=_maybe_float(cur.get("wind_gusts_10m")),
+                wind_dir=_maybe_int(cur.get("wind_direction_10m")),
+                wind_unit="km/h" if self.units.startswith("c") else "mph",
                 aqi=None if aqi_raw is None else round(float(aqi_raw)),
                 aqi_source=aqi_source,
                 aqi_station=aqi_station,

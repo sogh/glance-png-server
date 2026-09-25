@@ -66,6 +66,7 @@ You can also render one directly, which is how the preview page does it:
 | [`today-agenda`](#today-agenda) | What is left on today's calendar |
 | [`todos`](#todos) | Open items from the reminders file |
 | [`weather`](#weather) | Current conditions |
+| [`wind`](#wind) | Wind speed, direction and gusts, with an intensity graphic |
 
 ### `activity`
 
@@ -422,4 +423,17 @@ Current conditions
 | `forecast` | number | `3` | Days of forecast on the right; 0 for none. (min 0, max 3) |
 | `feels` | bool | `false` | Show 'feels like' when it differs. |
 | `margin` | number | `8` | Blank kept at each edge, so the pane separates from its neighbours as the device pans past. (min 0, max 40) |
+| `background` | color | `black` | One of: any palette colour or `#rrggbb`. |
+
+### `wind`
+
+Wind speed, direction and gusts, with an intensity graphic
+
+| Param | Type | Default | Means |
+|---|---|---|---|
+| `floor` | number | `0` | Hide the panel below this speed; 0 always shows it. (min 0, max 60) |
+| `gusts` | bool | `true` | Show the gust when it beats the wind. |
+| `band` | bool | `true` | Name the strength: CALM, BREEZY, GALE. |
+| `direction` | bool | `true` | Show the compass point. |
+| `margin` | number | `8` | Smallest gap at the left and right edges. (min 0, max 40) |
 | `background` | color | `black` | One of: any palette colour or `#rrggbb`. |

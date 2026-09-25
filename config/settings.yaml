@@ -123,6 +123,10 @@ sources:
     longitude: "${GLANCE_LON:-}"
     units: fahrenheit         # or celsius
     refresh: 900
+    # Wind comes back in this same call, so it costs no extra request. The
+    # speed unit follows `units`: mph with fahrenheit, km/h with celsius.
+    # The `wind` scene draws it -- it would not fit on the weather panel,
+    # whose third line is already carrying the precipitation chance and AQI.
     air_quality: true         # a second call, to a different Open-Meteo host
     air_refresh: 3600         # AQI is published hourly; polling it on the
                               # 15-minute forecast clock only wastes calls
