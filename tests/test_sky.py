@@ -52,6 +52,21 @@ def test_phase_names_cover_the_whole_cycle():
     assert {"NEW", "FULL", "FIRST QUARTER", "LAST QUARTER"} <= names
 
 
+def test_the_phase_is_spelled_out_when_there_is_room():
+    """Three modules leave ~146px between the times; the longest name is 57."""
+    from glance.fonts import get_font
+    from glance.moon import phase_at
+    from glance.scenes.sky import phase_label
+
+    small = get_font("3x5")
+    base = datetime(2026, 9, 1, 23, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    for d in range(30):
+        moon = phase_at(base + timedelta(days=d))
+        assert phase_label(moon, 138, small) == moon.name
+        # and on a single module it still gives way rather than overrunning
+        assert phase_label(moon, 10, small) == moon.short_name
+
+
 def test_short_names_fit_a_panel():
     base = datetime(2026, 1, 19, tzinfo=timezone.utc)
     for d in range(30):

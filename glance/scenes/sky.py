@@ -201,6 +201,16 @@ def _fmt(when: datetime | None) -> str:
     return f"{hour}:{when.minute:02d}{'A' if when.hour < 12 else 'P'}"
 
 
+def phase_label(moon, free: int, font) -> str:
+    """The phase name, spelled out when the ground band has room for it.
+
+    On three modules there is about 146px between the sunrise and sunset
+    times, against 57 for the longest name -- "WAN GIBB" was sized for a
+    single 64px panel and then left in place on one three times as wide.
+    """
+    return moon.name if font.measure(moon.name) <= free else moon.short_name
+
+
 def _available(ctx: RenderContext, params: dict[str, Any]) -> bool:
     if params.get("always"):
         return True
@@ -350,11 +360,20 @@ def render_sky(ctx: RenderContext, params: dict[str, Any]) -> Canvas:
                     small.measure(set_) + 4, 6, (8, 10, 8))
         c.text(2, 27, rise, dim("amber", 0.9), small)
         c.text(c.width - 2, 27, set_, dim("orange", 0.9), small, "right")
+    # What is left of the ground band once the times have taken both ends.
+    reserved = 0
+    if bool(params.get("times", True)):
+        reserved = (small.measure(_fmt(sunrise)) + small.measure(_fmt(sunset))
+                    + 8 + 8)
+
     centre = []
     if placement == "ground":
         centre.append((stamp, dim("white", 0.8)))
     if bool(params.get("label", True)) and not daytime:
-        centre.append((phase_at(now).short_name, dim("white", 0.6)))
+        moon = phase_at(now)
+        used = sum(small.measure(t) for t, _ in centre) + (5 if centre else 0)
+        free = c.width - reserved - used
+        centre.append((phase_label(moon, free, small), dim("white", 0.6)))
     if centre:
         gap = 5
         total = sum(small.measure(t) for t, _ in centre) + gap * (len(centre) - 1)
