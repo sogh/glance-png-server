@@ -94,6 +94,7 @@ class RenderContext:
     instagram: Any = None
     baseball: Any = None
     homeassistant: Any = None
+    tides: Any = None                 # sources.tides.TideSource
     todos: TodoSource | None = None
     holidays: list[Holiday] = field(default_factory=list)
     width_override: int | None = None

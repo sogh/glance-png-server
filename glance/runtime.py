@@ -32,6 +32,7 @@ from .sources.wpbl import WpblSource
 from .sources.baseball import BaseballSource
 from .sources.homeassistant import HomeAssistantSource
 from .sources.instagram import InstagramSource
+from .sources.tides import TideSource
 from .sources.weather import WeatherSource
 from .sources.todos import TodoSource
 from .sources.vocabulary import Vocabulary
@@ -60,6 +61,7 @@ class GlanceApp:
         self.calendar: CalendarSource | None = self.calendars.get("default") or first
         self.brightness = brightness_mod.Brightness.from_config(settings.brightness)
         self.weather = self._build_weather(settings)
+        self.tides = self._build_tides(settings)
         self.instagram = self._build_instagram(settings)
         self.baseball = self._build_baseball(settings)
         self.homeassistant = self._build_ha(settings)
@@ -109,6 +111,35 @@ class GlanceApp:
         )
         source.air_quality = bool(spec.get("air_quality", True))
         return source
+
+    @staticmethod
+    def _build_tides(settings: Settings) -> TideSource:
+        """Tides borrow the weather's coordinates and units unless told otherwise.
+
+        Somebody reading degrees Fahrenheit wants feet; and the nearest
+        station to where the weather is measured is the one to ask for.
+        """
+        spec = settings.tides or {}
+        weather = settings.weather or {}
+
+        def coord(key: str) -> float | None:
+            raw = spec.get(key, weather.get(key))
+            try:
+                return float(raw) if raw not in (None, "") else None
+            except (TypeError, ValueError):
+                return None
+
+        units = spec.get("units") or (
+            "metric" if str(weather.get("units", "")).lower().startswith("c") else "english")
+        return TideSource(
+            cache_dir=settings.cache_dir,
+            station=str(spec.get("station", "") or ""),
+            latitude=coord("latitude"),
+            longitude=coord("longitude"),
+            units=str(units),
+            refresh=int(spec.get("refresh", 21600)),
+            tz=settings.tz,
+        )
 
     @staticmethod
     def _build_instagram(settings: Settings) -> InstagramSource:
@@ -230,6 +261,7 @@ class GlanceApp:
 
             calendars_changed = fresh.calendars != self.settings.calendars
             weather_changed = fresh.weather != self.settings.weather
+            tides_changed = weather_changed or fresh.tides != self.settings.tides
             instagram_changed = fresh.instagram != self.settings.instagram
             baseball_before = self.settings.baseball
             ha_before = self.settings.homeassistant
@@ -237,6 +269,8 @@ class GlanceApp:
             self.brightness = brightness_mod.Brightness.from_config(fresh.brightness)
             if weather_changed:
                 self.weather = self._build_weather(fresh)
+            if tides_changed:
+                self.tides = self._build_tides(fresh)
             if instagram_changed:
                 self.instagram = self._build_instagram(fresh)
             if fresh.baseball != baseball_before:
@@ -353,6 +387,7 @@ class GlanceApp:
             calendar=self.calendar,
             calendars=self.calendars,
             weather=self.weather,
+            tides=self.tides,
             instagram=self.instagram,
             baseball=self.baseball,
             homeassistant=self.homeassistant,
@@ -461,6 +496,7 @@ class GlanceApp:
                                     if self.weather.air_source is not None
                                     else {"source": "open-meteo"}),
                 },
+                "tides": self.tides.status(),
                 "homeassistant": {
                     "configured": self.homeassistant.configured,
                     "last_error": self.homeassistant.last_error,

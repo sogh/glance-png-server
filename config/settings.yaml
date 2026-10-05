@@ -152,6 +152,22 @@ sources:
     # air, so it is dropped before the worst-pollutant rule is applied.
     aqi_max_distance_km: 25
 
+  # Tide predictions from NOAA. No key, no account. The `tides` scene draws
+  # them: the water over the next day, the height now, and the next turns.
+  #
+  # Leave `station` blank and the nearest NOAA prediction station to the
+  # weather coordinates above is used -- here that is Kayak Point, 6km off.
+  # Find another at tidesandcurrents.noaa.gov/tide_predictions.html; the id
+  # is the seven-digit number in its URL.
+  #
+  # Heights are above mean lower low water, the datum tide tables use, so a
+  # negative number is a properly low tide rather than an error. Units follow
+  # the weather: feet with fahrenheit, metres with celsius.
+  tides:
+    station: ""
+    refresh: 21600            # predictions never change; this only moves the
+                              # window forward with the clock
+
   # Instagram follower and post counts, via the official Graph API.
   #
   # Scraping the public profile does not work -- unauthenticated requests get

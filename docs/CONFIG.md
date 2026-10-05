@@ -173,6 +173,27 @@ have one — here that is PM2.5 from 13km away, PM10 from 27km and ozone from
 lets a reading from the next county describe your garden. Distance is applied
 first, then the worst-of rule among what is left.
 
+### `sources.tides`
+
+```yaml
+sources:
+  tides:
+    station: ""             # NOAA station id; blank = nearest to the weather coordinates
+    units: english          # english (ft) | metric (m); defaults to follow weather.units
+    latitude: ...           # optional; defaults to the weather's
+    longitude: ...
+    refresh: 21600
+```
+
+Predictions from NOAA CO-OPS — no key, no account. Only the highs and lows
+are fetched, because most stations near a shoreline are *subordinate* and
+NOAA publishes nothing finer for them; the curve between turns is drawn as
+half a cosine. Heights are above MLLW, so a negative low is real.
+
+With no `station`, NOAA's station list is fetched once (two megabytes, kept
+as `tide-stations.json` in the cache) and the nearest is used. `/api/status`
+reports which station that was and how far off.
+
 ### `sources.scoreboards`
 
 Named boards, each becoming a `scores` (and for ESPN, a `rankings`) panel.
@@ -277,7 +298,7 @@ the ones the shipped config expects. Put them in `.env` — gitignored,
 | `GLANCE_ICS_AGENDA` | the `agenda` calendar |
 | `GLANCE_ICS_REMINDERS` | the `reminders` calendar |
 | `GLANCE_ICS_EVENTS` | the `events` calendar |
-| `GLANCE_LAT`, `GLANCE_LON` | weather |
+| `GLANCE_LAT`, `GLANCE_LON` | weather, and the nearest tide station |
 | `GLANCE_HA_URL`, `GLANCE_HA_TOKEN` | Home Assistant |
 | `GLANCE_IG_USER_ID`, `GLANCE_IG_TOKEN` | Instagram |
 | `GLANCE_TOKEN` | `server.access_token` |

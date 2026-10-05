@@ -63,6 +63,7 @@ You can also render one directly, which is how the preview page does it:
 | [`sprites`](#sprites) | Every sprite, for checking the art |
 | [`static`](#static) | A PNG file from assets/static/ |
 | [`text`](#text) | Fixed text from the channel config |
+| [`tides`](#tides) | The tide now, which way it is going, and the next highs and lows |
 | [`today-agenda`](#today-agenda) | What is left on today's calendar |
 | [`todos`](#todos) | Open items from the reminders file |
 | [`weather`](#weather) | Current conditions |
@@ -379,6 +380,19 @@ Fixed text from the channel config
 | `sub_color` | color | — | One of: any palette colour or `#rrggbb`. |
 | `font` | select | `5x7` | Typeface for the body text. One of: `5x7`, `3x5`, `5x7mono`. |
 | `scale` | number | — | Blank fits it automatically. (min 1, max 4) |
+| `background` | color | `black` | One of: any palette colour or `#rrggbb`. |
+
+### `tides`
+
+The tide now, which way it is going, and the next highs and lows
+
+| Param | Type | Default | Means |
+|---|---|---|---|
+| `count` | number | `2` | How many upcoming highs and lows to list (2 at most beside the day's range). (min 1, max 4) |
+| `day` | bool | `true` | Also list the day's highest and lowest tide. |
+| `graph` | bool | `true` | Draw the water level from six hours ago to eighteen ahead. |
+| `hour24` | bool | `false` | 24-hour clock. |
+| `margin` | number | `8` | Smallest gap at the left and right edges. (min 0, max 40) |
 | `background` | color | `black` | One of: any palette colour or `#rrggbb`. |
 
 ### `today-agenda`
